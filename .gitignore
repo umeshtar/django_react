@@ -1,0 +1,4 @@
+/.idea
+/backend/.venv
+/backend/db.sqlite3
+migrations/
