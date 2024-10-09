@@ -19,6 +19,10 @@ class Employee(RecurField):
         return self.name
 
 
+class EmployeeBank(RecurField):
+    name = models.CharField(max_length=100)
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
 
-
+    def __str__(self):
+        return self.name
 
