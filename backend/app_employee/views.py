@@ -1,13 +1,12 @@
-from django.shortcuts import render
-from django.views import View
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 
 # Create your views here.
-class EmployeeView(View):
-    template_name = 'employee/home.html'
+class EmployeeView(APIView):
 
     def get(self, request, *args, **kwargs):
-        return render(request, self.template_name)
+        return Response({'data': 'Hello World'})
 
 
 

@@ -4,6 +4,7 @@ from django.db import models
 
 # Create your models here.
 class RecurField(models.Model):
+    objects = models.Manager()
     is_del = models.BooleanField(default=False)
     add_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="%(app_label)s%(class)sadd")
     modify_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="%(app_label)s%(class)schange")
