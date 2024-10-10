@@ -1,5 +1,6 @@
 /.idea
 /backend/.venv
+/backend/.idea
 /backend/db.sqlite3
 migrations/
 
