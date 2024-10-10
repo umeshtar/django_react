@@ -83,11 +83,7 @@ if __name__ == '__main__':
                         'children': children,
                     })
             else:
-                has_perm = False
-                for perm in menu.permissions.all():
-                    has_perm = user.has_perm(perm)
-                    if has_perm:
-                        break
+                has_perm = any([user.has_perm(perm) for perm in menu.permissions.all()])
                 print(menu, has_perm)
                 if has_perm:
                     dic = {
