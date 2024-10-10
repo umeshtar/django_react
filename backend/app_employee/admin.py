@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from app_employee.models import Employee, Department, EmployeeBank
+from app_employee.models import *
 from app_system.admin import RecurAdmin
 
 

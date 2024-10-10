@@ -1,6 +1,8 @@
 from django.contrib import admin
+from django.contrib.auth.models import Permission
+from django.contrib.contenttypes.models import ContentType
 
-from app_system.models import ModuleConfiguration, MenuItem, SystemConfiguration
+from app_system.models import *
 
 
 # Register your models here.
@@ -13,13 +15,16 @@ class RecurAdmin(admin.ModelAdmin):
         self.list_editable = self.list_editable + ('is_del',)
 
 
-admin.site.register(ModuleConfiguration, RecurAdmin)
 admin.site.register(SystemConfiguration, RecurAdmin)
+admin.site.register(CustomPermission, RecurAdmin)
+admin.site.register(DjangoModelPermission, RecurAdmin)
+admin.site.register(Permission)
+admin.site.register(ContentType)
 
 
 @admin.register(MenuItem)
 class MenuItemAdmin(RecurAdmin):
-    list_display = ('name', 'is_main_menu', 'menu_type', 'page_url')
+    list_display = ('name', 'is_main_menu', 'menu_type')
     list_editable = ('is_main_menu',)
 
 

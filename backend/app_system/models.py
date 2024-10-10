@@ -1,4 +1,5 @@
-from django.contrib.auth.models import User
+from django.apps import apps
+from django.contrib.auth.models import User, Group
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.urls import get_resolver
@@ -19,136 +20,90 @@ class RecurField(models.Model):
         abstract = True
 
 
-class ModuleConfiguration(RecurField):
-    url_name = models.CharField(max_length=100)
-
-    def __str__(self):
-        return self.url_name
-
-    @staticmethod
-    def allowed_url_names():
-        url_patterns = get_resolver().url_patterns
-        urls = []
-        app_names = ['system', 'employee']
-
-        def collect_urls(urlpatterns, app_name):
-            for pattern in urlpatterns:
-                if hasattr(pattern, 'url_patterns'):
-                    if pattern.app_name in app_names:
-                        collect_urls(pattern.url_patterns, pattern.app_name)
-                elif app_name:
-                    urls.append(f'{app_name}:{pattern.name}')
-        collect_urls(url_patterns, '')
-        return urls
-
-    def save(self, *args, **kwargs):
-        if self.url_name not in self.allowed_url_names():
-            raise ValidationError('url_name is not valid')
-        super().save(*args, **kwargs)
-
-
-class MenuItem(RecurField):
-    menu_type_choices = [
-        ('drop-down', 'drop-down'),
-        ('navigation', 'navigation'),
-        ('route', 'route'),
-    ]
-    name = models.CharField(max_length=100)
-    menu_type = models.CharField(max_length=50, choices=menu_type_choices)
-    is_main_menu = models.BooleanField(default=False)
-
-    # for menu_type == 'navigation' or 'route'
-    page_url = models.URLField(null=True, blank=True)
-    modules = models.ManyToManyField(ModuleConfiguration, blank=True)
-    routes = models.ManyToManyField('self', blank=True, symmetrical=False, related_name='route_menu_items')
-
-    # for menu_type == 'drop-down'
-    children = models.ManyToManyField('self', blank=True, symmetrical=False, related_name='child_menu_items')
-
-    def __str__(self):
-        return self.name
-
-
-# Example
-"""
-Dashboard
-Employee (Employee Overview -> Experience For -> Bank)
-Company
-Company Branch
-Master
-- City
-- Department
-- Designation
-"""
-
-
 class SystemConfiguration(RecurField):
     name = models.CharField(max_length=100)
 
     def __str__(self):
         return self.name
 
-""" For Sample """
-# class DjangoModelConfiguration(recur_field):
-#     name = models.CharField(max_length=100)
 
-#     def __str__(self):
-#         return self.name
+class DjangoModelPermission(RecurField):
+    codename = models.CharField(max_length=100)
 
-#     @staticmethod
-#     def allowed_models():
-#         return [
-#             f'{app}.{model}'
-#             for app, model_dict in apps.all_models.items()
-#             if app.startswith('App_')
-#             for model in model_dict
-#         ]
+    def __str__(self):
+        return self.codename
 
-#     def save(self, *args, **kwargs):
-#         if self.name not in self.allowed_models():
-#             raise ValidationError('Invalid Model Name, Must be App_Name.model_name')
-#         super().save(*args, **kwargs)
+    @staticmethod
+    def allowed_permissions():
+        return [
+            f'{app}.{perm}_{model}'
+            for app, model_dict in apps.all_models.items()
+            if app.startswith('app_')
+            for model in model_dict
+            for perm in ['add', 'view', 'change', 'delete']
+        ]
+    
+    def save(self, *args, **kwargs):
+        if self.codename not in self.allowed_permissions():
+            raise ValidationError('Invalid Permission')
+        super().save(*args, **kwargs)
+    
 
+class MenuItem(RecurField):
+    menu_type_choices = [
+        ('drop-down', 'drop-down'),
+        ('navigation', 'navigation'),
+    ]
+    name = models.CharField(max_length=100)
+    menu_type = models.CharField(max_length=50, choices=menu_type_choices)
+    is_main_menu = models.BooleanField(default=False)
 
-# class MenuItem(recur_field):
-#     module_type_choices = [
-#         ('drop-down', 'drop-down'),
-#         ('navigation', 'navigation'),
-#         ('route', 'route'),
-#     ]
-#     name = models.CharField(max_length=100)
-#     module_type = models.CharField(max_length=50, choices=module_type_choices)
+    # for menu_type == 'navigation'
+    page_url = models.URLField(null=True, blank=True)
+    permissions = models.ManyToManyField(DjangoModelPermission, blank=True)
 
-#     # for module_type == 'navigation' or 'route'
-#     page_url = models.URLField(null=True, blank=True)
-#     django_models = models.ManyToManyField(DjangoModelConfiguration, blank=True, related_name='model_menu_items')
-#     routes = models.ManyToManyField('self', blank=True, related_name='route_menu_items', symmetrical=False)
+    # for drop-down and nested navigation
+    children = models.ManyToManyField('self', blank=True, symmetrical=False, related_name='parent_menu_items')
 
-#     # for module_type == 'drop-down'
-#     children = models.ManyToManyField('self', blank=True, symmetrical=False)
-
-#     def __str__(self):
-#         return self.name
-
-
-# class CustomPermission(recur_field):
-#     name = models.CharField(max_length=200)
-#     codename = models.CharField(max_length=100)
-#     description = models.CharField(max_length=1000)
-
-#     element_type_choices = [
-#         ('Button', 'Button'),
-#     ]
-#     element_type = models.CharField(max_length=100, choices=element_type_choices, null=True, blank=True)
-
-#     users = models.ManyToManyField(CustomUser, blank=True, related_name='custom_permissions')
-#     groups = models.ManyToManyField(Group, blank=True, related_name='custom_permissions')
-#     django_models = models.ManyToManyField(DjangoModelConfiguration, blank=True, related_name='custom_permissions')
-
-#     def __str__(self):
-#         return self.name
+    def __str__(self):
+        return self.name
 
 
+class CustomPermission(RecurField):
+    element_type_choices = [
+        ('Button', 'Button'),
+    ]
+    name = models.CharField(max_length=200)
+    codename = models.CharField(max_length=100)
+    element_type = models.CharField(max_length=100, choices=element_type_choices, null=True, blank=True)
+    description = models.CharField(max_length=1000)
+    is_common_for_all = models.BooleanField(default=False)
+
+    users = models.ManyToManyField(User, blank=True, related_name='custom_permissions')
+    groups = models.ManyToManyField(Group, blank=True, related_name='custom_permissions')
+    menu_items = models.ManyToManyField(MenuItem, blank=True, related_name='custom_permissions')
+
+    def __str__(self):
+        return self.name
+
+
+"""
+Employee(False)
+Employee -> Employee Bank(True)
+Master
+ - Department
+ - City
+ - State
+ - Country
+Company
+Company Branch
+System Configuration
+
+Google Review
+Send Email
+Send Whatsapp
+Assign Task
+"""
 
 
 
