@@ -1,5 +1,5 @@
 from django.apps import apps
-from django.contrib.auth.models import User, Group
+from django.contrib.auth.models import User, Group, Permission
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.urls import get_resolver
@@ -27,43 +27,18 @@ class SystemConfiguration(RecurField):
         return self.name
 
 
-class DjangoModelPermission(RecurField):
-    codename = models.CharField(max_length=100)
-
-    def __str__(self):
-        return self.codename
-
-    @staticmethod
-    def allowed_permissions():
-        return [
-            f'{app}.{perm}_{model}'
-            for app, model_dict in apps.all_models.items()
-            if app.startswith('app_')
-            for model in model_dict
-            for perm in ['add', 'view', 'change', 'delete']
-        ]
-    
-    def save(self, *args, **kwargs):
-        if self.codename not in self.allowed_permissions():
-            raise ValidationError('Invalid Permission')
-        super().save(*args, **kwargs)
-    
-
-class MenuItem(RecurField):
+class ModuleConfiguration(RecurField):
     menu_type_choices = [
         ('drop-down', 'drop-down'),
         ('navigation', 'navigation'),
+        ('route', 'route'),
     ]
     name = models.CharField(max_length=100)
     menu_type = models.CharField(max_length=50, choices=menu_type_choices)
-    is_main_menu = models.BooleanField(default=False)
-
-    # for menu_type == 'navigation'
+    is_root_menu = models.BooleanField(default=False)
     page_url = models.URLField(null=True, blank=True)
-    permissions = models.ManyToManyField(DjangoModelPermission, blank=True)
-
-    # for drop-down and nested navigation
-    children = models.ManyToManyField('self', blank=True, symmetrical=False, related_name='parent_menu_items')
+    permissions = models.ManyToManyField(Permission, blank=True)
+    children = models.ManyToManyField('self', blank=True, symmetrical=False, related_name='parents')
 
     def __str__(self):
         return self.name
@@ -81,7 +56,7 @@ class CustomPermission(RecurField):
 
     users = models.ManyToManyField(User, blank=True, related_name='custom_permissions')
     groups = models.ManyToManyField(Group, blank=True, related_name='custom_permissions')
-    menu_items = models.ManyToManyField(MenuItem, blank=True, related_name='custom_permissions')
+    menu_items = models.ManyToManyField(ModuleConfiguration, blank=True, related_name='custom_permissions')
 
     def __str__(self):
         return self.name

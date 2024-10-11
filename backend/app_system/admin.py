@@ -17,15 +17,14 @@ class RecurAdmin(admin.ModelAdmin):
 
 admin.site.register(SystemConfiguration, RecurAdmin)
 admin.site.register(CustomPermission, RecurAdmin)
-admin.site.register(DjangoModelPermission, RecurAdmin)
 admin.site.register(Permission)
 admin.site.register(ContentType)
 
 
-@admin.register(MenuItem)
-class MenuItemAdmin(RecurAdmin):
-    list_display = ('name', 'is_main_menu', 'menu_type')
-    list_editable = ('is_main_menu',)
+@admin.register(ModuleConfiguration)
+class ModuleConfigurationAdmin(RecurAdmin):
+    list_display = ('name', 'is_root_menu', 'menu_type')
+    list_editable = ('is_root_menu',)
 
 
 
