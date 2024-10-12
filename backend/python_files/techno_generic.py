@@ -630,3 +630,57 @@ def techno_representation(instance, data, is_form, serializer):
                 lst.append(value)
             data[k] = lst
     return data
+
+
+
+class ReactBoxIcon(recur_field):
+    name = models.CharField(max_length=100)
+    class_name = models.CharField(max_length=50)
+
+    def __str__(self):
+        return self.name
+
+
+class ModuleConfiguration(recur_field):
+    module_type_choices = [
+        ('drop-down', 'drop-down'),
+        ('navigation', 'navigation'),
+        ('route', 'route'),
+    ]
+    name = models.CharField(max_length=100)
+    module_type = models.CharField(max_length=50, choices=module_type_choices)
+    react_box_icon = models.ForeignKey(ReactBoxIcon, on_delete=models.PROTECT, null=True, blank=True)
+    is_main_menu = models.BooleanField(default=False)
+    page_url = models.URLField(null=True, blank=True)
+    permissions = models.ManyToManyField(Permission, blank=True)
+    children = models.ManyToManyField('self', blank=True, symmetrical=False)
+
+    def __str__(self):
+        return self.name
+
+    @staticmethod
+    def allowed_permissions():
+        """ Use in View to Restrict Applying these permissions to users or groups """
+        filter_dic = {
+            'content_type__app_label__startswith': 'App_',
+        }
+        return Permission.objects.filter(**filter_dic).values_list('id', flat=True)
+
+
+class CustomPermission(recur_field):
+    element_type_choices = [
+        ('Button', 'Button'),
+    ]
+    name = models.CharField(max_length=200)
+    codename = models.CharField(max_length=100)
+    element_type = models.CharField(max_length=100, choices=element_type_choices, null=True, blank=True)
+    description = models.CharField(max_length=1000)
+    is_common_for_all = models.BooleanField(default=False)
+    is_exempt_perms = models.BooleanField(default=False)
+
+    users = models.ManyToManyField(CustomUser, blank=True, related_name='custom_permissions')
+    groups = models.ManyToManyField(Group, blank=True, related_name='custom_permissions')
+    modules = models.ManyToManyField(ModuleConfiguration, blank=True, related_name='custom_permissions')
+
+    def __str__(self):
+        return self.name
