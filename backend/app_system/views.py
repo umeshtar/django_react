@@ -11,8 +11,7 @@ class IndexView(APIView):
     model = ModuleConfiguration
 
     def get(self, request, *args, **kwargs):
-        print(request.user)
-        return Response({'data': 'test'})
+        return Response({'data': f'{request.user}'})
 
 
 
