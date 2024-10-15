@@ -1,7 +1,7 @@
 import Cookies from "js-cookie"
-import { authFetch } from "../api_helper"
+import { authFetch } from "../../helpers/api_helper"
 
-const handleSubmit = async (e) => {
+const handleLogin = async (e) => {
     e.preventDefault()
     try {
         const response = await authFetch.post('/token/', {
@@ -20,7 +20,7 @@ const handleSubmit = async (e) => {
 
 export function Login() {
     return (
-        <form method="post" onSubmit={handleSubmit}>
+        <form method="post" onSubmit={handleLogin}>
             <div>
                 <label>User Name</label>
                 <input type="text" name="username" />
