@@ -17,11 +17,6 @@ from rest_framework.response import Response
 from rest_framework.serializers import ModelSerializer
 from rest_framework_simplejwt import authentication
 
-from App_User.models import CustomPermission, ModuleConfiguration
-from Backend.djangoenv import Django_Mode
-from Projects_Python_Files.django_delete import delete_records
-from Projects_Python_Files.validators import check_email, check_valid_number
-
 
 class ReactHookForm:
     field_types = {
@@ -198,7 +193,7 @@ class TechnoSerializerValidation:
                     qs = qs.exclude(pk=self.instance.pk)
                 if qs.exists():
                     self.__add_error(field)
-    
+
     def check_unique_set(self, *args):
         filter_dic = dict()
         for field in args:
@@ -218,23 +213,23 @@ class TechnoSerializerValidation:
     def check_multi_exists(self, *args):
         pass
 
-    def check_email(self, *args):
-        for field in args:
-            value = self.attrs.get(field, None)
-            if value and not check_email(value):
-                self.__add_error(field)
+    # def check_email(self, *args):
+    #     for field in args:
+    #         value = self.attrs.get(field, None)
+    #         if value and not check_email(value):
+    #             self.__add_error(field)
 
-    def check_phone(self, *args):
-        for field in args:
-            value = self.attrs.get(field, None)
-            if value:
-                if field in self.country_code:
-                    code = self.attrs.get(self.country_code[field], None)
-                    code = code.country_dial_code if code else None
-                else:
-                    code = '91'
-                if code and value and check_valid_number(phone_number=value, country_code=code) is False:
-                    self.__add_error(field)
+    # def check_phone(self, *args):
+    #     for field in args:
+    #         value = self.attrs.get(field, None)
+    #         if value:
+    #             if field in self.country_code:
+    #                 code = self.attrs.get(self.country_code[field], None)
+    #                 code = code.country_dial_code if code else None
+    #             else:
+    #                 code = '91'
+    #             if code and value and check_valid_number(phone_number=value, country_code=code) is False:
+    #                 self.__add_error(field)
 
     def check_future_datetime(self, *args):
         for field in args:
@@ -273,62 +268,54 @@ class TechnoGenericBaseAPIView(GenericAPIView):
         if self.title is None:
             self.title = self.model._meta.verbose_name.capitalize()
 
-        if Django_Mode == 'Development':
-            # if DjangoModelPermissions not in self.permission_classes:
-            #     raise ImproperlyConfigured(f"Attribute 'permission_classes' missing TechnoModelPermission")
-            if not self.modules:
-                raise ImproperlyConfigured(f"Attribute 'modules' can not be blank")
+        if DjangoModelPermissions not in self.permission_classes:
+            raise ImproperlyConfigured(f"Attribute 'permission_classes' missing TechnoModelPermission")
+        if not self.modules:
+            raise ImproperlyConfigured(f"Attribute 'modules' can not be blank")
 
-            self.modules_data = self.get_modules_data()
-            self.permissions.update(self.get_model_permission())
-            self.permissions.update(self.get_module_permissions())
-            custom_perms = self.get_custom_permission()
-            if custom_perms:
-                self.permissions['__custom'] = custom_perms
-        else:
-            self.permissions = {
-                '__add': True,
-                '__change': True,
-                '__view': True,
-                '__delete': True,
-            }
+        # self.modules_data = self.get_modules_data()
+        self.permissions.update(self.get_model_permission())
+        # self.permissions.update(self.get_module_permissions())
+        # custom_perms = self.get_custom_permission()
+        # if custom_perms:
+        #     self.permissions['__custom'] = custom_perms
 
-    def get_modules_data(self):
-        def get_recur_modules(menus):
-            lst = []
-            for menu in menus:
-                if menu.module_type == 'drop-down':
-                    children = get_recur_modules(menu.children.exclude(pk=menu.pk))
-                    if children:
-                        lst.append({
-                            'name': menu.name,
-                            'type': menu.module_type,
-                            'page_url': menu.page_url,
-                            'icon': menu.react_box_icon.class_name if menu.react_box_icon else '',
-                            'children': children,
-                        })
-
-                elif menu.module_type == 'navigation':
-                    has_perm = any([
-                        self.request.user.has_perm(f'{perm.content_type.app_label}.{perm.codename}')
-                        for perm in menu.permissions.all()
-                    ])
-                    if has_perm:
-                        dic = {
-                            'name': menu.name,
-                            'type': menu.module_type,
-                            'page_url': menu.page_url,
-                            'icon': menu.react_box_icon.class_name if menu.react_box_icon else '',
-                        }
-                        children = get_recur_modules(menu.children.exclude(pk=menu.pk))
-                        if children:
-                            dic['children'] = children
-                        lst.append(dic)
-            return lst
-
-        main_menus = ModuleConfiguration.objects.filter(
-            is_main_menu=True).prefetch_related('permissions__content_type', 'children')
-        return get_recur_modules(main_menus)
+    # def get_modules_data(self):
+    #     def get_recur_modules(menus):
+    #         lst = []
+    #         for menu in menus:
+    #             if menu.module_type == 'drop-down':
+    #                 children = get_recur_modules(menu.children.exclude(pk=menu.pk))
+    #                 if children:
+    #                     lst.append({
+    #                         'name': menu.name,
+    #                         'type': menu.module_type,
+    #                         'page_url': menu.page_url,
+    #                         'icon': menu.react_box_icon.class_name if menu.react_box_icon else '',
+    #                         'children': children,
+    #                     })
+    #
+    #             elif menu.module_type == 'navigation':
+    #                 has_perm = any([
+    #                     self.request.user.has_perm(f'{perm.content_type.app_label}.{perm.codename}')
+    #                     for perm in menu.permissions.all()
+    #                 ])
+    #                 if has_perm:
+    #                     dic = {
+    #                         'name': menu.name,
+    #                         'type': menu.module_type,
+    #                         'page_url': menu.page_url,
+    #                         'icon': menu.react_box_icon.class_name if menu.react_box_icon else '',
+    #                     }
+    #                     children = get_recur_modules(menu.children.exclude(pk=menu.pk))
+    #                     if children:
+    #                         dic['children'] = children
+    #                     lst.append(dic)
+    #         return lst
+    #
+    #     main_menus = ModuleConfiguration.objects.filter(
+    #         is_main_menu=True).prefetch_related('permissions__content_type', 'children')
+    #     return get_recur_modules(main_menus)
 
     def get_model_permission(self, model_class=None):
         if not model_class:
@@ -345,45 +332,45 @@ class TechnoGenericBaseAPIView(GenericAPIView):
             perms['__view'] = True
         return perms
 
-    def get_module_permissions(self):
-        app_label = self.model._meta.app_label
-        model_name = self.model._meta.model_name.lower()
-        view_app_model_name = f'{app_label}.{model_name}'
-
-        configs = ModuleConfiguration.objects.prefetch_related(
-            'permissions__content_type').filter(name__in=self.modules)
-        check_repeat = []
-        perms = defaultdict(dict)
-        for config in configs:
-            for perm in config.permissions.all():
-                app_model_name = f'{perm.content_type.app_label}.{perm.content_type.model}'
-                if not app_model_name == view_app_model_name:
-                    perm_code = f'{perm.content_type.app_label}.{perm.codename}'
-                    perm_name = perm.codename.rsplit(f'_{perm.content_type.model}')[0]
-                    model_name = perm.content_type.model
-                    if model_name not in perms:
-                        check_repeat.append(app_model_name)
-                        perms[model_name][perm_name] = self.request.user.has_perm(perm_code)
-                    else:
-                        if app_model_name in check_repeat:
-                            perms[model_name][perm_name] = self.request.user.has_perm(perm_code)
-                        else:
-                            perms[app_model_name][perm_name] = self.request.user.has_perm(perm_code)
-        return perms
-
-    def get_custom_permission(self):
-        perms = dict()
-        q_object = Q(modules__name__in=self.modules) | Q(is_common_for_all=True)
-        qs = CustomPermission.objects.filter(is_del=False).filter(q_object)
-        if qs.exists():
-            if self.request.user.is_superuser:
-                perms.update({perm.codename: True for perm in qs})
-            else:
-                perms.update({perm.codename: perm.is_exempt_perms for perm in qs})
-                qs = qs.filter(Q(users=self.request.user) | Q(groups__user=self.request.user))
-                if qs.exists():
-                    perms.update({perm.codename: True for perm in qs})
-        return perms
+    # def get_module_permissions(self):
+    #     app_label = self.model._meta.app_label
+    #     model_name = self.model._meta.model_name.lower()
+    #     view_app_model_name = f'{app_label}.{model_name}'
+    #
+    #     configs = ModuleConfiguration.objects.prefetch_related(
+    #         'permissions__content_type').filter(name__in=self.modules)
+    #     check_repeat = []
+    #     perms = defaultdict(dict)
+    #     for config in configs:
+    #         for perm in config.permissions.all():
+    #             app_model_name = f'{perm.content_type.app_label}.{perm.content_type.model}'
+    #             if not app_model_name == view_app_model_name:
+    #                 perm_code = f'{perm.content_type.app_label}.{perm.codename}'
+    #                 perm_name = perm.codename.rsplit(f'_{perm.content_type.model}')[0]
+    #                 model_name = perm.content_type.model
+    #                 if model_name not in perms:
+    #                     check_repeat.append(app_model_name)
+    #                     perms[model_name][perm_name] = self.request.user.has_perm(perm_code)
+    #                 else:
+    #                     if app_model_name in check_repeat:
+    #                         perms[model_name][perm_name] = self.request.user.has_perm(perm_code)
+    #                     else:
+    #                         perms[app_model_name][perm_name] = self.request.user.has_perm(perm_code)
+    #     return perms
+    #
+    # def get_custom_permission(self):
+    #     perms = dict()
+    #     q_object = Q(modules__name__in=self.modules) | Q(is_common_for_all=True)
+    #     qs = CustomPermission.objects.filter(is_del=False).filter(q_object)
+    #     if qs.exists():
+    #         if self.request.user.is_superuser:
+    #             perms.update({perm.codename: True for perm in qs})
+    #         else:
+    #             perms.update({perm.codename: perm.is_exempt_perms for perm in qs})
+    #             qs = qs.filter(Q(users=self.request.user) | Q(groups__user=self.request.user))
+    #             if qs.exists():
+    #                 perms.update({perm.codename: True for perm in qs})
+    #     return perms
 
     def get_list_serializer(self, *args, **kwargs):
         if self.list_serializer_class:
@@ -459,8 +446,7 @@ class TechnoGenericBaseAPIView(GenericAPIView):
         4. Getting Permissions for Module, get_perms: True
         """
         response = dict()
-        if Django_Mode == 'Development':
-            response['__modules'] = self.get_modules_data()
+        # response['__modules'] = self.get_modules_data()
 
         get_perms = request.GET.get('get_perms', 'False').lower() == 'true'
         if get_perms:
@@ -515,7 +501,8 @@ class TechnoGenericBaseAPIView(GenericAPIView):
         return Response({'data': data, 'Success': msg}, status=status_code)
 
     def delete_record(self, request, *args, **kwargs):
-        return delete_records(self.request, model_class=self.model, rec_id_kwargs='rec_id')
+        pass
+        # return delete_records(self.request, model_class=self.model, rec_id_kwargs='rec_id')
 
 
 class TechnoGenericAPIView(TechnoGenericBaseAPIView):
@@ -632,55 +619,56 @@ def techno_representation(instance, data, is_form, serializer):
     return data
 
 
-
-class ReactBoxIcon(recur_field):
-    name = models.CharField(max_length=100)
-    class_name = models.CharField(max_length=50)
-
-    def __str__(self):
-        return self.name
-
-
-class ModuleConfiguration(recur_field):
-    module_type_choices = [
-        ('drop-down', 'drop-down'),
-        ('navigation', 'navigation'),
-        ('route', 'route'),
-    ]
-    name = models.CharField(max_length=100)
-    module_type = models.CharField(max_length=50, choices=module_type_choices)
-    react_box_icon = models.ForeignKey(ReactBoxIcon, on_delete=models.PROTECT, null=True, blank=True)
-    is_main_menu = models.BooleanField(default=False)
-    page_url = models.URLField(null=True, blank=True)
-    permissions = models.ManyToManyField(Permission, blank=True)
-    children = models.ManyToManyField('self', blank=True, symmetrical=False)
-
-    def __str__(self):
-        return self.name
-
-    @staticmethod
-    def allowed_permissions():
-        """ Use in View to Restrict Applying these permissions to users or groups """
-        filter_dic = {
-            'content_type__app_label__startswith': 'App_',
-        }
-        return Permission.objects.filter(**filter_dic).values_list('id', flat=True)
+# class ReactBoxIcon(recur_field):
+#     name = models.CharField(max_length=100)
+#     class_name = models.CharField(max_length=50)
+#
+#     def __str__(self):
+#         return self.name
 
 
-class CustomPermission(recur_field):
-    element_type_choices = [
-        ('Button', 'Button'),
-    ]
-    name = models.CharField(max_length=200)
-    codename = models.CharField(max_length=100)
-    element_type = models.CharField(max_length=100, choices=element_type_choices, null=True, blank=True)
-    description = models.CharField(max_length=1000)
-    is_common_for_all = models.BooleanField(default=False)
-    is_exempt_perms = models.BooleanField(default=False)
+# class ModuleConfiguration(recur_field):
+#     module_type_choices = [
+#         ('drop-down', 'drop-down'),
+#         ('navigation', 'navigation'),
+#         ('route', 'route'),
+#     ]
+#     name = models.CharField(max_length=100)
+#     module_type = models.CharField(max_length=50, choices=module_type_choices)
+#     react_box_icon = models.ForeignKey(ReactBoxIcon, on_delete=models.PROTECT, null=True, blank=True)
+#     is_main_menu = models.BooleanField(default=False)
+#     page_url = models.URLField(null=True, blank=True)
+#     permissions = models.ManyToManyField(Permission, blank=True)
+#     children = models.ManyToManyField('self', blank=True, symmetrical=False)
+#
+#     def __str__(self):
+#         return self.name
+#
+#     @staticmethod
+#     def allowed_permissions():
+#         """ Use in View to Restrict Applying these permissions to users or groups """
+#         filter_dic = {
+#             'content_type__app_label__startswith': 'App_',
+#         }
+#         return Permission.objects.filter(**filter_dic).values_list('id', flat=True)
 
-    users = models.ManyToManyField(CustomUser, blank=True, related_name='custom_permissions')
-    groups = models.ManyToManyField(Group, blank=True, related_name='custom_permissions')
-    modules = models.ManyToManyField(ModuleConfiguration, blank=True, related_name='custom_permissions')
 
-    def __str__(self):
-        return self.name
+# class CustomPermission(recur_field):
+#     element_type_choices = [
+#         ('Button', 'Button'),
+#     ]
+#     name = models.CharField(max_length=200)
+#     codename = models.CharField(max_length=100)
+#     element_type = models.CharField(max_length=100, choices=element_type_choices, null=True, blank=True)
+#     description = models.CharField(max_length=1000)
+#     is_common_for_all = models.BooleanField(default=False)
+#     is_exempt_perms = models.BooleanField(default=False)
+#
+#     users = models.ManyToManyField(CustomUser, blank=True, related_name='custom_permissions')
+#     groups = models.ManyToManyField(Group, blank=True, related_name='custom_permissions')
+#     modules = models.ManyToManyField(ModuleConfiguration, blank=True, related_name='custom_permissions')
+#
+#     def __str__(self):
+#         return self.name
+
+

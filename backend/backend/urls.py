@@ -24,4 +24,5 @@ urlpatterns = [
     path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('employee/', include('app_employee.urls', namespace='employee')),
+    path('company/', include('app_company.urls', namespace='company')),
 ]

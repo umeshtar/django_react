@@ -25,6 +25,9 @@ admin.site.register(ContentType)
 class ModuleConfigurationAdmin(RecurAdmin):
     list_display = ('name', 'is_root_menu', 'menu_type')
     list_editable = ('is_root_menu',)
+    filter_horizontal = ('permissions',)
+
+
 
 
 
