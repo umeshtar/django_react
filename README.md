@@ -1,2 +1,2 @@
 # django_react
-Web Application using Django and React
+Customized Web Application using Django and React
