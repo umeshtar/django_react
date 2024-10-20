@@ -1,4 +1,3 @@
-
 import inspect
 import json
 from collections import defaultdict
@@ -8,18 +7,85 @@ from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.exceptions import ValidationError, PermissionDenied
+from rest_framework.exceptions import ValidationError
 from rest_framework.fields import ChoiceField
 from rest_framework.generics import GenericAPIView
-from rest_framework.permissions import IsAuthenticated, DjangoModelPermissions
+from rest_framework.permissions import DjangoModelPermissions
 from rest_framework.relations import PrimaryKeyRelatedField, ManyRelatedField
 from rest_framework.response import Response
 from rest_framework.serializers import ModelSerializer
-from rest_framework_simplejwt import authentication
+
+from app_system.models import ModuleConfiguration, CustomPermission
+
+
+def get_field_verbose_name(model, field_name):
+    return model._meta.get_field(field_name).verbose_name.capitalize()
+
+
+def get_modules_data(user):
+    def get_recur_modules(modules):
+        lst = []
+        for module in modules:
+            if module.module_type == 'drop-down':
+                children = get_recur_modules(module.children.exclude(pk=module.pk))
+                if children:
+                    lst.append({
+                        'name': module.name,
+                        'type': module.module_type,
+                        'page_url': module.page_url,
+                        'icon': module.react_box_icon.class_name if module.react_box_icon else '',
+                        'children': children,
+                    })
+
+            elif module.module_type == 'navigation':
+                has_perm = any([
+                    user.has_perm(f'{perm.content_type.app_label}.{perm.codename}')
+                    for perm in module.permissions.all()
+                ])
+                if has_perm:
+                    dic = {
+                        'name': module.name,
+                        'type': module.module_type,
+                        'page_url': module.page_url,
+                        'icon': module.react_box_icon.class_name if module.react_box_icon else '',
+                    }
+                    children = get_recur_modules(module.children.exclude(pk=module.pk))
+                    if children:
+                        dic['children'] = children
+                    lst.append(dic)
+        return lst
+
+    main_modules = ModuleConfiguration.objects.filter(
+        is_root_menu=True).prefetch_related('permissions', 'permissions__content_type', 'children')
+    return get_recur_modules(main_modules)
+
+
+def has_model_perm(user, model, perm='any'):
+    app_label = model._meta.app_label
+    model_name = model._meta.model_name
+    perm_code = f"{app_label}.{{perm}}_{model_name}"
+
+    if perm == 'any':
+        return any([
+            user.has_perm(perm_code.format(perm='view')),
+            user.has_perm(perm_code.format(perm='add')),
+            user.has_perm(perm_code.format(perm='change')),
+            user.has_perm(perm_code.format(perm='delete')),
+        ])
+
+    if perm == 'all':
+        return all([
+            user.has_perm(perm_code.format(perm='view')),
+            user.has_perm(perm_code.format(perm='add')),
+            user.has_perm(perm_code.format(perm='change')),
+            user.has_perm(perm_code.format(perm='delete')),
+        ])
+
+    return user.has_perm(perm_code.format(perm=perm))
 
 
 class ReactHookForm:
-    field_types = {
+    __field_types = {
         'CharField': 'text',
         'URLField': 'url',
         'EmailField': 'email',
@@ -36,53 +102,49 @@ class ReactHookForm:
         'ImageField': 'file',
         'FileField': 'file',
     }
-    recur_field_list = ['cipher_text', 'salt', 'nonce', 'tag', 'add_by', 'modify_by',
-                        'del_by', 'is_del', 'add_date', 'modify_date', 'del_date', ]
+    __recur_field_list = ['add_by', 'modify_by', 'delete_by', 'is_del', 'add_date', 'modify_date', 'delete_date']
 
     def __init__(self, serializer):
-        self.serializer = serializer()
-        self.select_options_func = dict()
+        self.__serializer = serializer()
+        self.__select_options_func = dict()
 
     def set_select_options_func(self, **kwargs):
-        self.select_options_func.update(kwargs)
+        self.__select_options_func.update(kwargs)
 
     def get_configs(self, fields=(), exclude=(), ignore_recur_fields=True):
         configs = dict()
         default_values = dict()
-        serializer_fields = self.serializer.get_fields()
+        serializer_fields = self.__serializer.get_fields()
         if ignore_recur_fields is True:
-            serializer_fields = {k: v for k, v in serializer_fields.items() if k not in self.recur_field_list}
+            serializer_fields = {k: v for k, v in serializer_fields.items() if k not in self.__recur_field_list}
         if fields:
             serializer_fields = {k: v for k, v in serializer_fields.items() if k in fields}
         if exclude:
             serializer_fields = {k: v for k, v in serializer_fields.items() if k not in exclude}
         for key, field in serializer_fields.items():
-            field_name = self.get_field_verbose_name(key)
+            field_name = get_field_verbose_name(model=self.__serializer.Meta.model, field_name=key)
             configs[key] = dict()
-            configs[key]['type'] = field_type = self.get_field_type(field)
-            configs[key]['rules'] = self.get_rules(field, field_type, field_name)
+            configs[key]['type'] = field_type = self.__get_field_type(field)
+            configs[key]['rules'] = self.__get_rules(field, field_type, field_name)
             if field_type == 'select':
-                configs[key]['options'] = self.get_options(key, field)
-            default_values[key] = self.get_default_values(field)
+                configs[key]['options'] = self.__get_options(key, field)
+            default_values[key] = self.__get_default_values(field)
         return {
             'fields': configs,
             'defaultValues': default_values,
         }
 
     @staticmethod
-    def get_default_values(field):
+    def __get_default_values(field):
         return field.initial if field.initial is not None else ''
 
-    def get_field_type(self, field):
+    def __get_field_type(self, field):
         if field.style and 'base_template' in field.style and field.style['base_template'] == 'textarea.html':
             return 'textarea'
-        return self.field_types[field.__class__.__name__]
-
-    def get_field_verbose_name(self, key):
-        return self.serializer.Meta.model._meta.get_field(key).verbose_name.capitalize()
+        return self.__field_types[field.__class__.__name__]
 
     @staticmethod
-    def get_rules(field, field_type, field_name):
+    def __get_rules(field, field_type, field_name):
         rules = dict()
         if field.required is True and not field_type == 'file':
             rules['required'] = {'value': True, 'message': f"{field_name} is required"}
@@ -101,7 +163,7 @@ class ReactHookForm:
                                 'message': field.error_messages['max_value'].format(max_value=field.max_value)}
         return rules
 
-    def get_options(self, key, field):
+    def __get_options(self, key, field):
         queryset, choices = None, None
 
         if hasattr(field, 'queryset'):
@@ -120,8 +182,8 @@ class ReactHookForm:
             data = []
             for inst in queryset:
                 dic = {'value': str(inst.pk + 270000981), 'label': str(inst)}
-                if key in self.select_options_func:
-                    dic.update(**self.select_options_func[key](inst))
+                if key in self.__select_options_func:
+                    dic.update(**self.__select_options_func[key](inst))
                 if type(inst).__name__ == 'Tbl_Country_Code':
                     dic['code'] = inst.country_code.replace('+', '')
                 data.append(dic)
@@ -134,7 +196,7 @@ class ReactHookForm:
 
 
 class TechnoSerializerValidation:
-    error_msg = {
+    __error_msg = {
         'check_empty': '{field} is required',
         'check_exists': '{field} is already exists',
         'check_unique_set': '{field} is already exists with {fields}',
@@ -146,85 +208,90 @@ class TechnoSerializerValidation:
     }
 
     def __init__(self, model, instance):
-        self.model = model
-        self.instance = instance
-        self.attrs = None
-        self.enc_attrs = dict()
-        self.custom_errors = defaultdict(list)
-        self.non_field_errors = ''
-        self.country_code = dict()
+        self.__model = model
+        self.__instance = instance
+        self.__attrs = None
+        self.__enc_attrs = dict()
+        self.__custom_errors = defaultdict(list)
+        self.__country_code = dict()
 
     def set_attrs(self, attrs):
-        self.attrs = attrs
+        self.__attrs = attrs
 
     def set_country_code(self, **kwargs):
-        self.country_code.update(**kwargs)
+        self.__country_code.update(**kwargs)
+
+    def get_enc_attrs(self):
+        return self.__enc_attrs
+
+    def get_custom_errors(self):
+        return self.__custom_errors
 
     def __get_verbose_name(self, name):
-        return self.model._meta.get_field(name).verbose_name.capitalize()
+        return self.__model._meta.get_field(name).verbose_name.capitalize()
 
     def __add_error(self, field):
         calling_func = inspect.stack()[1].frame.f_code.co_name
-        error_msg = self.error_msg[calling_func].format(field=self.__get_verbose_name(field))
-        self.custom_errors[field].append(error_msg)
+        error_msg = self.__error_msg[calling_func].format(field=self.__get_verbose_name(field))
+        self.__custom_errors[field].append(error_msg)
 
     def check_empty(self, *args):
         for field in args:
-            value = self.attrs.get(field, None)
+            value = self.__attrs.get(field, None)
             if not value or (isinstance(value, str) and not value.strip()):
                 self.__add_error(field)
 
     def check_same_value(self, field, field2):
         if not field == field2:
-            value1 = self.attrs.get(field, None)
-            value2 = self.attrs.get(field2, None)
+            value1 = self.__attrs.get(field, None)
+            value2 = self.__attrs.get(field2, None)
             if value1 and value2 and value1 == value2:
-                error_msg = self.error_msg['check_same_value'].format(
+                error_msg = self.__error_msg['check_same_value'].format(
                     field1=self.__get_verbose_name(field), field2=self.__get_verbose_name(field2))
-                self.custom_errors[field].append(error_msg)
+                self.__custom_errors[field].append(error_msg)
 
     def check_exists(self, *args):
         for field in args:
-            value = self.attrs.get(field, None)
+            value = self.__attrs.get(field, None)
             if value:
                 filter_dic = {f'{field}__iexact' if isinstance(value, str) else field: value}
-                qs = self.model.objects.filter(is_del=False, **filter_dic)
-                if self.instance is not None:
-                    qs = qs.exclude(pk=self.instance.pk)
+                qs = self.__model.objects.filter(is_del=False, **filter_dic)
+                if self.__instance is not None:
+                    qs = qs.exclude(pk=self.__instance.pk)
                 if qs.exists():
                     self.__add_error(field)
 
     def check_unique_set(self, *args):
         filter_dic = dict()
         for field in args:
-            value = self.attrs.get(field, None)
+            value = self.__attrs.get(field, None)
             if value:
                 filter_dic[f'{field}__iexact' if isinstance(value, str) else field] = value
-        qs = self.model.objects.filter(is_del=False, **filter_dic)
-        if self.instance is not None:
-            qs = qs.exclude(pk=self.instance.pk)
+        qs = self.__model.objects.filter(is_del=False, **filter_dic)
+        if self.__instance is not None:
+            qs = qs.exclude(pk=self.__instance.pk)
         if qs.exists():
-            error_msg = self.error_msg['check_unique_set'].format(
+            error_msg = self.__error_msg['check_unique_set'].format(
                 field=self.__get_verbose_name(args[0]),
                 fields=', '.join([self.__get_verbose_name(arg) for arg in args[1:]])
             )
-            self.custom_errors[args[0]].append(error_msg)
+            self.__custom_errors[args[0]].append(error_msg)
 
     def check_multi_exists(self, *args):
         pass
 
     # def check_email(self, *args):
     #     for field in args:
-    #         value = self.attrs.get(field, None)
+    #         value = self.__attrs.get(field, None)
     #         if value and not check_email(value):
     #             self.__add_error(field)
 
     # def check_phone(self, *args):
     #     for field in args:
-    #         value = self.attrs.get(field, None)
+    #         value = self.__attrs.get(field, None)
     #         if value:
     #             if field in self.country_code:
-    #                 code = self.attrs.get(self.country_code[field], None)
+    #                 code = self.__attrs.get(self.country_code[field], None)
     #                 code = code.country_dial_code if code else None
     #             else:
     #                 code = '91'
@@ -233,150 +300,231 @@ class TechnoSerializerValidation:
 
     def check_future_datetime(self, *args):
         for field in args:
-            value = self.attrs.get(field, None)
+            value = self.__attrs.get(field, None)
             if value and type(value).__name__ == 'date' and value > timezone.now().date():
                 self.__add_error(field)
 
     def check_past_datetime(self, *args):
         for field in args:
-            value = self.attrs.get(field, None)
+            value = self.__attrs.get(field, None)
             if value and type(value).__name__ == 'date' and value < timezone.now().date():
                 self.__add_error(field)
 
 
-class TechnoGenericBaseAPIView(GenericAPIView):
-    permission_classes = [IsAuthenticated]
-    authentication_classes = [authentication.JWTAuthentication]
-    serializer_class = None
-    list_serializer_class = None
-    title = None
-    modules = ()
+class TechnoModelPermissions(DjangoModelPermissions):
+    def has_permission(self, request, view):
+        if request.method == 'GET':
+            print(request.user.has_perm('app_employee.view_employee'))
+            return True
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.model = None
-        self.modules_data = []
-        self.permissions = defaultdict(dict)
+        return super().has_permission(request, view)
 
-    def initial(self, request, *args, **kwargs):
-        super().initial(request, *args, **kwargs)
 
-        if self.serializer_class is None:
-            raise ImproperlyConfigured(f"Attribute 'serializer_class' can not be None")
-
-        self.model = self.serializer_class.Meta.model
-        if self.title is None:
-            self.title = self.model._meta.verbose_name.capitalize()
-
-        if DjangoModelPermissions not in self.permission_classes:
-            raise ImproperlyConfigured(f"Attribute 'permission_classes' missing TechnoModelPermission")
-        if not self.modules:
-            raise ImproperlyConfigured(f"Attribute 'modules' can not be blank")
-
-        # self.modules_data = self.get_modules_data()
-        self.permissions.update(self.get_model_permission())
-        # self.permissions.update(self.get_module_permissions())
-        # custom_perms = self.get_custom_permission()
-        # if custom_perms:
-        #     self.permissions['__custom'] = custom_perms
-
-    # def get_modules_data(self):
-    #     def get_recur_modules(menus):
-    #         lst = []
-    #         for menu in menus:
-    #             if menu.module_type == 'drop-down':
-    #                 children = get_recur_modules(menu.children.exclude(pk=menu.pk))
-    #                 if children:
-    #                     lst.append({
-    #                         'name': menu.name,
-    #                         'type': menu.module_type,
-    #                         'page_url': menu.page_url,
-    #                         'icon': menu.react_box_icon.class_name if menu.react_box_icon else '',
-    #                         'children': children,
-    #                     })
-    #
-    #             elif menu.module_type == 'navigation':
-    #                 has_perm = any([
-    #                     self.request.user.has_perm(f'{perm.content_type.app_label}.{perm.codename}')
-    #                     for perm in menu.permissions.all()
-    #                 ])
-    #                 if has_perm:
-    #                     dic = {
-    #                         'name': menu.name,
-    #                         'type': menu.module_type,
-    #                         'page_url': menu.page_url,
-    #                         'icon': menu.react_box_icon.class_name if menu.react_box_icon else '',
-    #                     }
-    #                     children = get_recur_modules(menu.children.exclude(pk=menu.pk))
-    #                     if children:
-    #                         dic['children'] = children
-    #                     lst.append(dic)
-    #         return lst
-    #
-    #     main_menus = ModuleConfiguration.objects.filter(
-    #         is_main_menu=True).prefetch_related('permissions__content_type', 'children')
-    #     return get_recur_modules(main_menus)
+class TechnoPermissionMixin:
+    permission_classes = [DjangoModelPermissions]
 
     def get_model_permission(self, model_class=None):
-        if not model_class:
+        perms = dict()
+        if model_class is None:
             model_class = self.model
         app_label = model_class._meta.app_label
         model_name = model_class._meta.model_name.lower()
-        perms = {
-            '__add': self.request.user.has_perm(f'{app_label}.add_{model_name}'),
-            '__change': self.request.user.has_perm(f'{app_label}.change_{model_name}'),
-            '__view': self.request.user.has_perm(f'{app_label}.view_{model_name}'),
-            '__delete': self.request.user.has_perm(f'{app_label}.delete_{model_name}'),
-        }
+        perms['__add'] = self.request.user.has_perm(f'{app_label}.add_{model_name}')
+        perms['__change'] = self.request.user.has_perm(f'{app_label}.change_{model_name}')
+        perms['__view'] = self.request.user.has_perm(f'{app_label}.view_{model_name}')
+        perms['__delete'] = self.request.user.has_perm(f'{app_label}.delete_{model_name}')
         if perms['__change'] or perms['__delete']:
             perms['__view'] = True
         return perms
 
-    # def get_module_permissions(self):
-    #     app_label = self.model._meta.app_label
-    #     model_name = self.model._meta.model_name.lower()
-    #     view_app_model_name = f'{app_label}.{model_name}'
-    #
-    #     configs = ModuleConfiguration.objects.prefetch_related(
-    #         'permissions__content_type').filter(name__in=self.modules)
-    #     check_repeat = []
-    #     perms = defaultdict(dict)
-    #     for config in configs:
-    #         for perm in config.permissions.all():
-    #             app_model_name = f'{perm.content_type.app_label}.{perm.content_type.model}'
-    #             if not app_model_name == view_app_model_name:
-    #                 perm_code = f'{perm.content_type.app_label}.{perm.codename}'
-    #                 perm_name = perm.codename.rsplit(f'_{perm.content_type.model}')[0]
-    #                 model_name = perm.content_type.model
-    #                 if model_name not in perms:
-    #                     check_repeat.append(app_model_name)
-    #                     perms[model_name][perm_name] = self.request.user.has_perm(perm_code)
-    #                 else:
-    #                     if app_model_name in check_repeat:
-    #                         perms[model_name][perm_name] = self.request.user.has_perm(perm_code)
-    #                     else:
-    #                         perms[app_model_name][perm_name] = self.request.user.has_perm(perm_code)
-    #     return perms
-    #
-    # def get_custom_permission(self):
-    #     perms = dict()
-    #     q_object = Q(modules__name__in=self.modules) | Q(is_common_for_all=True)
-    #     qs = CustomPermission.objects.filter(is_del=False).filter(q_object)
-    #     if qs.exists():
-    #         if self.request.user.is_superuser:
-    #             perms.update({perm.codename: True for perm in qs})
-    #         else:
-    #             perms.update({perm.codename: perm.is_exempt_perms for perm in qs})
-    #             qs = qs.filter(Q(users=self.request.user) | Q(groups__user=self.request.user))
-    #             if qs.exists():
-    #                 perms.update({perm.codename: True for perm in qs})
-    #     return perms
+    def get_extra_modules_permissions(self):
+        app_label = self.model._meta.app_label
+        model_name = self.model._meta.model_name.lower()
+        configs = ModuleConfiguration.objects.prefetch_related(
+            'permissions', 'permissions__content_type').filter(
+            name__in=self.modules).exclude(
+            permissions__content_type__app_label=app_label, permissions__content_type__model=model_name)
+        check_repeat = []
+        perms = defaultdict(dict)
+        for config in configs:
+            for perm in config.permissions.all():
+                app_model_name = f'{perm.content_type.app_label}.{perm.content_type.model}'
+                perm_code = f'{perm.content_type.app_label}.{perm.codename}'
+                perm_name = perm.codename.rsplit(f'_{perm.content_type.model}')[0]
+                model_name = perm.content_type.model
+                if model_name not in perms:
+                    check_repeat.append(app_model_name)
+                    perms[model_name][perm_name] = self.request.user.has_perm(perm_code)
+                else:
+                    if app_model_name in check_repeat:
+                        perms[model_name][perm_name] = self.request.user.has_perm(perm_code)
+                    else:
+                        perms[app_model_name][perm_name] = self.request.user.has_perm(perm_code)
+        return perms
+
+    def get_custom_permission(self):
+        perms = dict()
+        q_object = Q(modules__name__in=self.modules) | Q(is_common_for_all=True)
+        qs = CustomPermission.objects.filter(is_del=False).filter(q_object)
+        if qs.exists():
+            if self.request.user.is_superuser:
+                perms.update({perm.codename: True for perm in qs})
+            else:
+                perms.update({perm.codename: False for perm in qs})
+                qs = qs.filter(Q(users=self.request.user) | Q(groups__user=self.request.user))
+                if qs.exists():
+                    perms.update({perm.codename: True for perm in qs})
+        return perms
+
+
+class TechnoParamsMixin:
+    request = None
+
+    def has_param(self, key):
+        return self.request.GET.get(key, 'False').lower() == 'true'
+
+    def get_params_response(self, *args, **kwargs):
+        response = dict()
+
+        can_view = has_model_perm(user=self.request.user, model=self.model, perm='view')
+        can_create = has_model_perm(user=self.request.user, model=self.model, perm='change')
+        can_update = has_model_perm(user=self.request.user, model=self.model, perm='add')
+
+        get_crud = self.has_param('get_crud_configs')
+        get_record = self.has_param('fetch_record')
+        is_form = self.has_param('is_form')
+        if get_crud:
+            get_perms, get_fields, form_configs, get_data = True, True, True, True
+        else:
+            get_perms = self.has_param('get_perms')
+            get_fields = self.has_param('get_fields')
+            form_configs = self.has_param('get_form_configs')
+            get_data = self.has_param('get_data')
+
+        if get_perms:
+            response['permissions'] = {
+                **self.get_model_permission(),
+                **self.get_extra_modules_permissions(),
+            }
+            custom_perms = self.get_custom_permission()
+            if custom_perms:
+                response['permissions']['__custom'] = custom_perms
+
+        if get_fields:
+            response['fields'] = {
+                field_name: get_field_verbose_name(self.model, field_name)
+                for field_name in self.get_list_serializer_class().Meta.fields
+            } if can_view else dict()
+
+        if form_configs:
+            response['form_configs'] = self.get_form_configs() if (can_create or can_update) else dict()
+
+        if get_data:
+            response['data'] = self.get_list_serializer(
+                self.get_queryset(), many=True).data if can_view else []
+
+        if get_record:
+            if is_form:
+                response['data'] = self.get_serializer(
+                    self.get_object()).data if (can_create or can_update) else dict()
+            else:
+                response['data'] = self.get_detail_serializer(
+                    self.get_object()).data if can_view else dict()
+        return response
+
+
+class TechnoFetchMixin:
+    def fetch(self, request, *args, **kwargs):
+        response = self.get_params_response(request, *args, **kwargs)
+        return Response(response, status=status.HTTP_200_OK)
+
+
+class TechnoCreateMixin:
+
+    def create(self, request, *args, **kwargs):
+        s = self.get_serializer(data=self.get_post_data())
+        s.is_valid(raise_exception=True)
+        s.add_by = self.request.user
+        inst = s.save()
+        return Response({
+            'data': self.get_list_serializer(inst).data if has_model_perm(
+                user=request.user, model=self.model, perm='view') else dict(),
+            'Success': f"{self.title} Created Successfully",
+        }, status=status.HTTP_201_CREATED)
+
+
+class TechnoUpdateMixin:
+
+    def update(self, request, *args, **kwargs):
+        s = self.get_serializer(data=self.get_post_data(), instance=self.get_object())
+        s.is_valid(raise_exception=True)
+        s.modify_by = self.request.user
+        inst = s.save()
+        return Response({
+            'data': self.get_list_serializer(inst).data if has_model_perm(
+                user=request.user, model=self.model, perm='view') else dict(),
+            'Success': f"{self.title} Updated Successfully"
+        }, status=status.HTTP_200_OK)
+
+
+class TechnoDeleteMixin:
+
+    def soft_delete(self, request, *args, **kwargs):
+        self.get_object().delete()
+        # return delete_records(self.request, model_class=self.model, rec_id_kwargs='rec_id')
+
+
+class TechnoGenericBaseAPIView(GenericAPIView):
+    model = None
+    serializer_class = None
+    list_serializer_class = None
+    detail_serializer_class = None
+    title = None
+    modules = ()
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        if self.model is None:
+            raise ImproperlyConfigured(f"Attribute 'model' can not be None")
+        if self.serializer_class is None:
+            raise ImproperlyConfigured(f"Attribute 'serializer_class' can not be None")
+        if not self.modules:
+            raise ImproperlyConfigured(f"Attribute 'modules' can not be empty")
+        if self.title is None:
+            self.title = self.model._meta.verbose_name.capitalize()
+
+    def get_queryset(self):
+        return self.model.objects.filter(is_del=False)
+
+    def get_object(self):
+        payload = self.get_request_data()
+        return self.get_queryset().get(
+            pk=int(payload['rec_id']) - 270000981,
+            salt=payload['salt'],
+            nonce=payload['nonce'],
+            tag=payload['tag']
+        )
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['is_form'] = self.request.GET.get('is_form', 'False').lower() == 'true'
+        return context
+
+    def get_detail_serializer_class(self):
+        return self.detail_serializer_class or self.get_list_serializer_class()
+
+    def get_detail_serializer(self, *args, **kwargs):
+        detail_serializer_class = self.get_detail_serializer_class()
+        kwargs.setdefault('context', self.get_serializer_context())
+        return detail_serializer_class(*args, **kwargs)
+
+    def get_list_serializer_class(self):
+        return self.list_serializer_class or self.serializer_class
 
     def get_list_serializer(self, *args, **kwargs):
-        if self.list_serializer_class:
-            kwargs.setdefault('context', self.get_serializer_context())
-            return self.list_serializer_class(*args, **kwargs)
-        return self.get_serializer(*args, **kwargs)
+        list_serializer_class = self.get_list_serializer_class()
+        kwargs.setdefault('context', self.get_serializer_context())
+        return list_serializer_class(*args, **kwargs)
 
     def get_form_configs(self):
         return ReactHookForm(serializer=self.get_serializer_class()).get_configs()
@@ -414,110 +562,26 @@ class TechnoGenericBaseAPIView(GenericAPIView):
                     data[k] = [int(row['value']) - 270000981 for row in data[k] if type(row) == dict and 'value' in row]
         return data
 
-    def get_object_lookup_kwargs(self):
-        payload = self.get_request_data()
-        return dict(
-            pk=int(payload['rec_id']) - 270000981,
-            salt=payload['salt'],
-            nonce=payload['nonce'],
-            tag=payload['tag'],
-        )
 
-    def get_queryset(self):
-        return self.model.objects.filter(is_del=False).order_by('-pk')
-
-    def get_object(self):
-        return self.get_queryset().get(**self.get_object_lookup_kwargs())
-
-    def get_serializer_context(self):
-        context = super().get_serializer_context()
-        action = self.request.GET.get('action', None)
-        if action == 'fetch_record' and self.request.GET.get('is_form', 'False').lower() == 'true':
-            context['is_form'] = True
-        return context
-
-    def fetch_record(self, request, *args, **kwargs):
-        """
-        Allowed Cases to Call this method
-        1. Listing of Data from Queryset, action: get_data
-        2. Retrieving Single Object for Displaying Data, action: get_record
-        3. Retrieving Single Object for Editing Form, action: fetch_record, is_form: True
-        4. Getting Form Configuration for React Hook Form, get_form_configs: True
-        4. Getting Permissions for Module, get_perms: True
-        """
-        response = dict()
-        # response['__modules'] = self.get_modules_data()
-
-        get_perms = request.GET.get('get_perms', 'False').lower() == 'true'
-        if get_perms:
-            response['permissions'] = self.permissions
-
-        get_form_configs = request.GET.get('get_form_configs', 'False').lower() == 'true'
-        if get_form_configs:
-            if self.permissions['__add'] or self.permissions['__change']:
-                response['form_configs'] = self.get_form_configs()
-            else:
-                response['form_configs'] = dict()
-
-        action = request.GET.get('action', None)
-        if action == 'get_data':
-            if self.permissions['__view']:
-                response['data'] = self.get_list_serializer(self.get_queryset(), many=True).data
-            else:
-                response['data'] = []
-
-        elif action == 'fetch_record':
-            is_form = request.GET.get('is_form', 'False').lower() == 'true'
-            if is_form:
-                if self.permissions['__change']:
-                    response['data'] = self.get_serializer(self.get_object()).data
-                else:
-                    raise PermissionDenied()
-            else:
-                if self.permissions['__view']:
-                    response['data'] = self.get_list_serializer(self.get_object()).data
-                else:
-                    raise PermissionDenied()
-
-        return Response(response, status=status.HTTP_200_OK)
-
-    def create_record(self, request, *args, **kwargs):
-        return self.create_or_update()
-
-    def update_record(self, request, *args, **kwargs):
-        return self.create_or_update(instance=self.get_object())
-
-    def create_or_update(self, instance=None):
-        s = self.get_serializer(data=self.get_post_data(), instance=instance)
-        s.is_valid(raise_exception=True)
-        if instance:
-            s.modify_by = self.request.user
-        else:
-            s.add_by = self.request.user
-        inst = s.save()
-        data = self.get_list_serializer(inst).data if self.permissions['__view'] else dict()
-        msg = f"{self.title} {'Updated' if instance else 'Created'} Successfully"
-        status_code = status.HTTP_200_OK if instance else status.HTTP_201_CREATED
-        return Response({'data': data, 'Success': msg}, status=status_code)
-
-    def delete_record(self, request, *args, **kwargs):
-        pass
-        # return delete_records(self.request, model_class=self.model, rec_id_kwargs='rec_id')
-
-
-class TechnoGenericAPIView(TechnoGenericBaseAPIView):
+class TechnoGenericAPIView(TechnoFetchMixin,
+                           TechnoCreateMixin,
+                           TechnoUpdateMixin,
+                           TechnoDeleteMixin,
+                           TechnoPermissionMixin,
+                           TechnoParamsMixin,
+                           TechnoGenericBaseAPIView):
 
     def get(self, request, *args, **kwargs):
-        return self.fetch_record(request, *args, **kwargs)
+        return self.fetch(request, *args, **kwargs)
 
     def post(self, request, *args, **kwargs):
-        return self.create_record(request, *args, **kwargs)
+        return self.create(request, *args, **kwargs)
 
     def put(self, request, *args, **kwargs):
-        return self.update_record(request, *args, **kwargs)
+        return self.update(request, *args, **kwargs)
 
     def delete(self, request, *args, **kwargs):
-        return self.delete_record(request, *args, **kwargs)
+        return self.soft_delete(request, *args, **kwargs)
 
 
 class TechnoModelSerializer(ModelSerializer):
@@ -534,18 +598,18 @@ class TechnoModelSerializer(ModelSerializer):
     def validate(self, attrs):
         self.tsv.set_attrs(attrs)
         self.techno_validate(attrs)
-        if self.tsv.non_field_errors:
-            raise ValidationError(self.tsv.non_field_errors)
-        if self.tsv.custom_errors:
-            raise ValidationError(self.tsv.custom_errors)
+        custom_errors = self.tsv.get_custom_errors()
+        if custom_errors:
+            raise ValidationError(custom_errors)
         return attrs
 
     def techno_validate(self, attrs: dict):
         pass
 
     def save(self, **kwargs):
-        if self.tsv.enc_attrs:
-            kwargs.update(self.tsv.enc_attrs)
+        enc_attrs = self.tsv.get_enc_attrs()
+        if enc_attrs:
+            kwargs.update(enc_attrs)
         return super().save(**kwargs)
 
     def to_representation(self, instance):
@@ -567,9 +631,10 @@ class TechnoListSerializer(ModelSerializer):
 
 def techno_representation(instance, data, is_form, serializer):
     data['rec_id'] = str(instance.pk + 270000981)
-    data['salt'] = instance.salt
-    data['nonce'] = instance.nonce
-    data['tag'] = instance.tag
+    if hasattr(instance, 'salt'):
+        data['salt'] = instance.salt
+        data['nonce'] = instance.nonce
+        data['tag'] = instance.tag
     for k, v in serializer.get_fields().items():
         if isinstance(v, ChoiceField):
             value = getattr(instance, k, None)
@@ -617,58 +682,4 @@ def techno_representation(instance, data, is_form, serializer):
                 lst.append(value)
             data[k] = lst
     return data
-
-
-# class ReactBoxIcon(recur_field):
-#     name = models.CharField(max_length=100)
-#     class_name = models.CharField(max_length=50)
-#
-#     def __str__(self):
-#         return self.name
-
-
-# class ModuleConfiguration(recur_field):
-#     module_type_choices = [
-#         ('drop-down', 'drop-down'),
-#         ('navigation', 'navigation'),
-#         ('route', 'route'),
-#     ]
-#     name = models.CharField(max_length=100)
-#     module_type = models.CharField(max_length=50, choices=module_type_choices)
-#     react_box_icon = models.ForeignKey(ReactBoxIcon, on_delete=models.PROTECT, null=True, blank=True)
-#     is_main_menu = models.BooleanField(default=False)
-#     page_url = models.URLField(null=True, blank=True)
-#     permissions = models.ManyToManyField(Permission, blank=True)
-#     children = models.ManyToManyField('self', blank=True, symmetrical=False)
-#
-#     def __str__(self):
-#         return self.name
-#
-#     @staticmethod
-#     def allowed_permissions():
-#         """ Use in View to Restrict Applying these permissions to users or groups """
-#         filter_dic = {
-#             'content_type__app_label__startswith': 'App_',
-#         }
-#         return Permission.objects.filter(**filter_dic).values_list('id', flat=True)
-
-
-# class CustomPermission(recur_field):
-#     element_type_choices = [
-#         ('Button', 'Button'),
-#     ]
-#     name = models.CharField(max_length=200)
-#     codename = models.CharField(max_length=100)
-#     element_type = models.CharField(max_length=100, choices=element_type_choices, null=True, blank=True)
-#     description = models.CharField(max_length=1000)
-#     is_common_for_all = models.BooleanField(default=False)
-#     is_exempt_perms = models.BooleanField(default=False)
-#
-#     users = models.ManyToManyField(CustomUser, blank=True, related_name='custom_permissions')
-#     groups = models.ManyToManyField(Group, blank=True, related_name='custom_permissions')
-#     modules = models.ManyToManyField(ModuleConfiguration, blank=True, related_name='custom_permissions')
-#
-#     def __str__(self):
-#         return self.name
-
 

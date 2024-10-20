@@ -1,8 +1,5 @@
-from django.apps import apps
 from django.contrib.auth.models import User, Group, Permission
-from django.core.exceptions import ValidationError
 from django.db import models
-from django.urls import get_resolver
 
 
 # Create your models here.
@@ -56,29 +53,10 @@ class CustomPermission(RecurField):
 
     users = models.ManyToManyField(User, blank=True, related_name='custom_permissions')
     groups = models.ManyToManyField(Group, blank=True, related_name='custom_permissions')
-    menu_items = models.ManyToManyField(ModuleConfiguration, blank=True, related_name='custom_permissions')
+    modules = models.ManyToManyField(ModuleConfiguration, blank=True, related_name='custom_permissions')
 
     def __str__(self):
         return self.name
-
-
-"""
-Employee(False)
-Employee -> Employee Bank(True)
-Master
- - Department
- - City
- - State
- - Country
-Company
-Company Branch
-System Configuration
-
-Google Review
-Send Email
-Send Whatsapp
-Assign Task
-"""
 
 
 

@@ -1,5 +1,7 @@
 import Cookies from "js-cookie"
-import { authFetch } from "../../helpers/api_helper"
+import { authFetch } from "../../helpers/fetch"
+import { useNavigate } from "react-router-dom"
+import { useEffect } from "react"
 
 const handleLogin = async (e) => {
     e.preventDefault()
@@ -12,7 +14,7 @@ const handleLogin = async (e) => {
             access: response.data.access,
             refresh: response.data.refresh
         }))
-        window.location.href = '/'
+        window.location.href = '/emp'
     } catch (err) {
         alert('Login Failed')
     }
@@ -31,6 +33,18 @@ export function Login() {
             </div>
             <button>Submit</button>
         </form>
+    )
+}
+
+export function Logout() {
+    const navigate = useNavigate()
+    useEffect(() => {
+        Cookies.remove('authUser')
+        navigate('/login')
+    }, [])
+
+    return (
+        <h1>Log Out</h1>
     )
 }
 

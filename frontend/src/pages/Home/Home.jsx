@@ -1,10 +1,8 @@
-import { Navbar } from "../../layouts/Navbar";
-
+import { Link } from "react-router-dom";
 export function Home() {
     return (
         <>
-            <Navbar />
-            <h6>Home</h6>
+            <h1>Home</h1>
         </>
     )
 }

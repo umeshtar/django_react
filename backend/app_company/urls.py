@@ -1,15 +1,10 @@
-from rest_framework.routers import DefaultRouter, SimpleRouter
+from django.urls import path
 
-from app_company.views import IndexViewSet
+from app_company.views import CompanyView
 
 app_name = 'company'
 
-router = SimpleRouter()
-router.register('company', IndexViewSet, basename='company')
-
-urlpatterns = router.urls
-print(f'{urlpatterns=}')
-
-
-
+urlpatterns = [
+    path('', CompanyView.as_view(), name='home'),
+]
 
