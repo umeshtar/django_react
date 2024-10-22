@@ -1,27 +1,49 @@
+import React from 'react';
 import '../styles/crudTable.css'
+import { useForm } from 'react-hook-form';
+import { useDispatch } from 'react-redux';
+import { submitEmployeeForm } from '../features/Employee/employeeSlice';
 
-const FormComponent = () => {
+const FormComponent = ({ formConfigs }) => {
+    const { fields, defaultValues } = formConfigs
+    const { register, handleSubmit, formState: { errors }, } = useForm({ mode: 'all', defaultValues })
+
+    const dispatch = useDispatch()
+    const handleFormSubmit = (data) => {
+        dispatch(submitEmployeeForm({ ...data }))
+    }
+
     return (
-        <form style={{ marginBottom: 40 }}>
-            <label>Name:</label>
-            <input type="text" name="name" />
-            <label>Designation:</label>
-            <select name="designation">
-                <option value="IT">IT</option>
-                <option value="Sales">Sales</option>
-                <option value="HR">HR</option>
-            </select>
-            <button style={{ marginTop: 20 }}>Submit</button>
-        </form>
+        <form onSubmit={handleSubmit(handleFormSubmit)} noValidate>
+            {Object.entries(fields).map(([name, configs], index) => {
+                const required = configs.rules.required ? 'required' : ''
+                const errorMsg = errors[name]?.message
+                return (
+                    <React.Fragment key={index}>
+                        <p>
+                            {configs.type === 'select' ? (
+                                <select {...register(name, configs.rules)} placeholder={`Select ${configs.name}`} required={required} >
+                                    {configs.options.map((opt, i) => <option key={i} value={opt.value}>{opt.label}</option>)}
+                                </select>
+                            ) : (
+                                <input {...register(name, configs.rules)} placeholder={`Enter ${configs.name}`} required={required} />
+                            )}
+                        </p>
+                        {errorMsg && <p style={{ color: 'red' }}> {errorMsg} </p>}
+                    </ React.Fragment>
+                )
+            })}
+            <button>Submit</button>
+        </form >
     )
 }
 
-const TableComponent = ({ rows, columns }) => {
+const TableComponent = ({ data, fields }) => {
     return (
         <table>
             <thead>
                 <tr>
-                    {Object.values(columns).map((label, headerIndex) => {
+                    {Object.values(fields).map((label, headerIndex) => {
                         return (
                             <th key={headerIndex}>{label}</th>
                         )
@@ -30,10 +52,10 @@ const TableComponent = ({ rows, columns }) => {
                 </tr>
             </thead>
             <tbody>
-                {rows.map((obj, rowIndex) => {
+                {data.map((obj, rowIndex) => {
                     return (
                         <tr key={rowIndex}>
-                            {Object.keys(columns).map((key, dataIndex) => {
+                            {Object.keys(fields).map((key, dataIndex) => {
                                 return (
                                     <td key={dataIndex}>{obj[key]}</td>
                                 )
@@ -48,12 +70,13 @@ const TableComponent = ({ rows, columns }) => {
     )
 }
 
-export function CrudComponent({ title, columns, rows }) {
+export function CrudComponent({ title, fields, data, formConfigs }) {
     return (
         <>
             <h4>{title}</h4>
-            <FormComponent />
-            <TableComponent rows={rows} columns={columns} />
+            {formConfigs && <FormComponent formConfigs={formConfigs} />}
+            <hr />
+            {fields && <TableComponent data={data} fields={fields} />}
         </>
     )
 }

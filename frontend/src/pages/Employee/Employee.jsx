@@ -4,8 +4,11 @@ import { useEffect } from "react";
 import { fetchEmployees } from "../../features/Employee/employeeSlice";
 
 export function Employee() {
-    const empData = useSelector((state) => state.employee.data)
-    const empFields = useSelector((state) => state.employee.fields)
+    const title = useSelector((state) => state.employee.title)
+    const data = useSelector((state) => state.employee.data)
+    const fields = useSelector((state) => state.employee.fields)
+    const formConfigs = useSelector((state) => state.employee.formConfigs)
+    const crudConfigs = { title, data, fields, formConfigs }
 
     const dispatch = useDispatch()
     useEffect(() => {
@@ -13,9 +16,10 @@ export function Employee() {
     }, [dispatch])
 
     return (
-        <>
-            <CrudComponent title='Employee' columns={empFields} rows={empData}></CrudComponent>
-        </>
+        <CrudComponent {...crudConfigs} />
     )
 }
+
+
+
 

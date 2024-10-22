@@ -10,7 +10,7 @@ from rest_framework import status
 from rest_framework.exceptions import ValidationError
 from rest_framework.fields import ChoiceField
 from rest_framework.generics import GenericAPIView
-from rest_framework.permissions import DjangoModelPermissions
+from rest_framework.permissions import IsAuthenticated, DjangoModelPermissions
 from rest_framework.relations import PrimaryKeyRelatedField, ManyRelatedField
 from rest_framework.response import Response
 from rest_framework.serializers import ModelSerializer
@@ -84,6 +84,61 @@ def has_model_perm(user, model, perm='any'):
     return user.has_perm(perm_code.format(perm=perm))
 
 
+def techno_representation(instance, data, is_form, serializer):
+    data['rec_id'] = str(instance.pk + 270000981)
+    if hasattr(instance, 'salt'):
+        data['salt'] = instance.salt
+        data['nonce'] = instance.nonce
+        data['tag'] = instance.tag
+    for k, v in serializer.get_fields().items():
+        if isinstance(v, ChoiceField):
+            value = getattr(instance, k, None)
+            if value:
+                if is_form:
+                    data[k] = {'value': value,
+                               'label': v.choices[value]}
+                else:
+                    data[k] = v.choices[value]
+        elif isinstance(v, PrimaryKeyRelatedField):
+            inst = getattr(instance, k, None)
+            if inst:
+                if is_form:
+                    if hasattr(inst, 'salt'):
+                        data[k] = {'value': str(inst.pk + 270000981),
+                                   'salt': inst.salt,
+                                   'nonce': inst.nonce,
+                                   'tag': inst.tag,
+                                   'label': str(inst)}
+                    else:
+                        data[k] = {'value': str(inst.pk + 270000981),
+                                   'label': str(inst)}
+                else:
+                    data[k] = str(inst)
+        elif isinstance(v, ManyRelatedField):
+            qs = getattr(instance, k, None)
+            lst = []
+            for inst in qs.all():
+                if is_form:
+                    if hasattr(inst, 'salt'):
+                        value = {
+                               'value': str(inst.pk + 270000981),
+                               'salt': inst.salt,
+                               'nonce': inst.nonce,
+                               'tag': inst.tag,
+                               'label': str(inst)
+                           }
+                    else:
+                        value = {
+                            'value': str(inst.pk + 270000981),
+                            'label': str(inst)
+                        }
+                else:
+                    value = str(inst)
+                lst.append(value)
+            data[k] = lst
+    return data
+
+
 class ReactHookForm:
     __field_types = {
         'CharField': 'text',
@@ -125,6 +180,7 @@ class ReactHookForm:
             field_name = get_field_verbose_name(model=self.__serializer.Meta.model, field_name=key)
             configs[key] = dict()
             configs[key]['type'] = field_type = self.__get_field_type(field)
+            configs[key]['name'] = field_name
             configs[key]['rules'] = self.__get_rules(field, field_type, field_name)
             if field_type == 'select':
                 configs[key]['options'] = self.__get_options(key, field)
@@ -311,17 +367,54 @@ class TechnoSerializerValidation:
                 self.__add_error(field)
 
 
-class TechnoModelPermissions(DjangoModelPermissions):
-    def has_permission(self, request, view):
-        if request.method == 'GET':
-            print(request.user.has_perm('app_employee.view_employee'))
-            return True
+class TechnoModelSerializer(ModelSerializer):
+    class Meta:
+        model = None
+        fields = []
 
-        return super().has_permission(request, view)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.Meta.model or not self.Meta.fields:
+            raise ImproperlyConfigured(f'model and/or fields Missing in {self.__class__.__name__} Meta Class')
+        self.tsv = TechnoSerializerValidation(model=self.Meta.model, instance=self.instance)
+
+    def validate(self, attrs):
+        self.tsv.set_attrs(attrs)
+        self.techno_validate(attrs)
+        custom_errors = self.tsv.get_custom_errors()
+        if custom_errors:
+            raise ValidationError(custom_errors)
+        return attrs
+
+    def techno_validate(self, attrs: dict):
+        pass
+
+    def save(self, **kwargs):
+        enc_attrs = self.tsv.get_enc_attrs()
+        if enc_attrs:
+            kwargs.update(enc_attrs)
+        return super().save(**kwargs)
+
+    def to_representation(self, instance):
+        is_form = self.context.get('is_form', False)
+        data = super().to_representation(instance)
+        return techno_representation(instance, data, is_form, serializer=self)
 
 
+class TechnoListSerializer(ModelSerializer):
+    class Meta:
+        model = None
+        fields = []
+
+    def to_representation(self, instance):
+        is_form = False
+        data = super().to_representation(instance)
+        return techno_representation(instance, data, is_form, serializer=self)
+
+
+# noinspection PyUnresolvedReferences
 class TechnoPermissionMixin:
-    permission_classes = [DjangoModelPermissions]
+    permission_classes = [IsAuthenticated, DjangoModelPermissions]
 
     def get_model_permission(self, model_class=None):
         perms = dict()
@@ -377,21 +470,24 @@ class TechnoPermissionMixin:
         return perms
 
 
-class TechnoParamsMixin:
-    request = None
+# noinspection PyUnresolvedReferences
+class TechnoFetchMixin:
 
     def has_param(self, key):
         return self.request.GET.get(key, 'False').lower() == 'true'
 
+    def has_action(self, key):
+        return self.request.GET.get('action', None) == key
+
     def get_params_response(self, *args, **kwargs):
-        response = dict()
+        response = dict(title=self.title)
 
         can_view = has_model_perm(user=self.request.user, model=self.model, perm='view')
         can_create = has_model_perm(user=self.request.user, model=self.model, perm='change')
         can_update = has_model_perm(user=self.request.user, model=self.model, perm='add')
 
         get_crud = self.has_param('get_crud_configs')
-        get_record = self.has_param('fetch_record')
+        get_record = self.has_action('fetch_record')
         is_form = self.has_param('is_form')
         if get_crud:
             get_perms, get_fields, form_configs, get_data = True, True, True, True
@@ -399,7 +495,7 @@ class TechnoParamsMixin:
             get_perms = self.has_param('get_perms')
             get_fields = self.has_param('get_fields')
             form_configs = self.has_param('get_form_configs')
-            get_data = self.has_param('get_data')
+            get_data = self.has_action('get_data')
 
         if get_perms:
             response['permissions'] = {
@@ -423,7 +519,7 @@ class TechnoParamsMixin:
             response['data'] = self.get_list_serializer(
                 self.get_queryset(), many=True).data if can_view else []
 
-        if get_record:
+        elif get_record:
             if is_form:
                 response['data'] = self.get_serializer(
                     self.get_object()).data if (can_create or can_update) else dict()
@@ -432,19 +528,18 @@ class TechnoParamsMixin:
                     self.get_object()).data if can_view else dict()
         return response
 
-
-class TechnoFetchMixin:
     def fetch(self, request, *args, **kwargs):
         response = self.get_params_response(request, *args, **kwargs)
         return Response(response, status=status.HTTP_200_OK)
 
 
+# noinspection PyUnresolvedReferences
 class TechnoCreateMixin:
 
     def create(self, request, *args, **kwargs):
         s = self.get_serializer(data=self.get_post_data())
         s.is_valid(raise_exception=True)
-        s.add_by = self.request.user
+        s.add_by = request.user
         inst = s.save()
         return Response({
             'data': self.get_list_serializer(inst).data if has_model_perm(
@@ -453,6 +548,7 @@ class TechnoCreateMixin:
         }, status=status.HTTP_201_CREATED)
 
 
+# noinspection PyUnresolvedReferences
 class TechnoUpdateMixin:
 
     def update(self, request, *args, **kwargs):
@@ -467,11 +563,11 @@ class TechnoUpdateMixin:
         }, status=status.HTTP_200_OK)
 
 
+# noinspection PyUnresolvedReferences
 class TechnoDeleteMixin:
 
     def soft_delete(self, request, *args, **kwargs):
         self.get_object().delete()
-        # return delete_records(self.request, model_class=self.model, rec_id_kwargs='rec_id')
 
 
 class TechnoGenericBaseAPIView(GenericAPIView):
@@ -480,7 +576,7 @@ class TechnoGenericBaseAPIView(GenericAPIView):
     list_serializer_class = None
     detail_serializer_class = None
     title = None
-    modules = ()
+    modules = ('Under Development', )
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
@@ -496,14 +592,12 @@ class TechnoGenericBaseAPIView(GenericAPIView):
     def get_queryset(self):
         return self.model.objects.filter(is_del=False)
 
-    def get_object(self):
+    def get_object_lookup_kwargs(self):
         payload = self.get_request_data()
-        return self.get_queryset().get(
-            pk=int(payload['rec_id']) - 270000981,
-            salt=payload['salt'],
-            nonce=payload['nonce'],
-            tag=payload['tag']
-        )
+        return dict(pk=int(payload['rec_id']) - 270000981)
+
+    def get_object(self):
+        return self.get_queryset().get(**self.get_object_lookup_kwargs())
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -553,14 +647,18 @@ class TechnoGenericBaseAPIView(GenericAPIView):
         for k, v in serializer_class().get_fields().items():
             if k in data and data[k]:
                 if isinstance(v, PrimaryKeyRelatedField):
-                    if type(data[k]) == dict and 'value' in data[k]:
-                        data[k] = int(data[k]['value']) - 270000981
-                if isinstance(v, ChoiceField):
-                    if type(data[k]) == dict and 'value' in data[k]:
-                        data[k] = data[k]['value']
+                    data[k] = self.decrypt_id(data[k])
                 if isinstance(v, ManyRelatedField):
-                    data[k] = [int(row['value']) - 270000981 for row in data[k] if type(row) == dict and 'value' in row]
+                    data[k] = [self.decrypt_id(value) for value in data[k] if value]
         return data
+
+    @staticmethod
+    def encrypt_id(rec_id):
+        return str(int(rec_id) + 270000981)
+
+    @staticmethod
+    def decrypt_id(rec_id):
+        return int(rec_id) - 270000981
 
 
 class TechnoGenericAPIView(TechnoFetchMixin,
@@ -568,7 +666,6 @@ class TechnoGenericAPIView(TechnoFetchMixin,
                            TechnoUpdateMixin,
                            TechnoDeleteMixin,
                            TechnoPermissionMixin,
-                           TechnoParamsMixin,
                            TechnoGenericBaseAPIView):
 
     def get(self, request, *args, **kwargs):
@@ -584,102 +681,4 @@ class TechnoGenericAPIView(TechnoFetchMixin,
         return self.soft_delete(request, *args, **kwargs)
 
 
-class TechnoModelSerializer(ModelSerializer):
-    class Meta:
-        model = None
-        fields = []
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if not self.Meta.model or not self.Meta.fields:
-            raise ImproperlyConfigured(f'model and/or fields Missing in {self.__class__.__name__} Meta Class')
-        self.tsv = TechnoSerializerValidation(model=self.Meta.model, instance=self.instance)
-
-    def validate(self, attrs):
-        self.tsv.set_attrs(attrs)
-        self.techno_validate(attrs)
-        custom_errors = self.tsv.get_custom_errors()
-        if custom_errors:
-            raise ValidationError(custom_errors)
-        return attrs
-
-    def techno_validate(self, attrs: dict):
-        pass
-
-    def save(self, **kwargs):
-        enc_attrs = self.tsv.get_enc_attrs()
-        if enc_attrs:
-            kwargs.update(enc_attrs)
-        return super().save(**kwargs)
-
-    def to_representation(self, instance):
-        is_form = self.context.get('is_form', False)
-        data = super().to_representation(instance)
-        return techno_representation(instance, data, is_form, serializer=self)
-
-
-class TechnoListSerializer(ModelSerializer):
-    class Meta:
-        model = None
-        fields = []
-
-    def to_representation(self, instance):
-        is_form = False
-        data = super().to_representation(instance)
-        return techno_representation(instance, data, is_form, serializer=self)
-
-
-def techno_representation(instance, data, is_form, serializer):
-    data['rec_id'] = str(instance.pk + 270000981)
-    if hasattr(instance, 'salt'):
-        data['salt'] = instance.salt
-        data['nonce'] = instance.nonce
-        data['tag'] = instance.tag
-    for k, v in serializer.get_fields().items():
-        if isinstance(v, ChoiceField):
-            value = getattr(instance, k, None)
-            if value:
-                if is_form:
-                    data[k] = {'value': value,
-                               'label': v.choices[value]}
-                else:
-                    data[k] = v.choices[value]
-        elif isinstance(v, PrimaryKeyRelatedField):
-            inst = getattr(instance, k, None)
-            if inst:
-                if is_form:
-                    if hasattr(inst, 'salt'):
-                        data[k] = {'value': str(inst.pk + 270000981),
-                                   'salt': inst.salt,
-                                   'nonce': inst.nonce,
-                                   'tag': inst.tag,
-                                   'label': str(inst)}
-                    else:
-                        data[k] = {'value': str(inst.pk + 270000981),
-                                   'label': str(inst)}
-                else:
-                    data[k] = str(inst)
-        elif isinstance(v, ManyRelatedField):
-            qs = getattr(instance, k, None)
-            lst = []
-            for inst in qs.all():
-                if is_form:
-                    if hasattr(inst, 'salt'):
-                        value = {
-                               'value': str(inst.pk + 270000981),
-                               'salt': inst.salt,
-                               'nonce': inst.nonce,
-                               'tag': inst.tag,
-                               'label': str(inst)
-                           }
-                    else:
-                        value = {
-                            'value': str(inst.pk + 270000981),
-                            'label': str(inst)
-                        }
-                else:
-                    value = str(inst)
-                lst.append(value)
-            data[k] = lst
-    return data
 
