@@ -1,5 +1,6 @@
 import inspect
 import json
+import os
 from collections import defaultdict
 
 from django.core.exceptions import ImproperlyConfigured
@@ -14,6 +15,7 @@ from rest_framework.permissions import IsAuthenticated, DjangoModelPermissions
 from rest_framework.relations import PrimaryKeyRelatedField, ManyRelatedField
 from rest_framework.response import Response
 from rest_framework.serializers import ModelSerializer
+from rest_framework.views import exception_handler
 
 from app_system.models import ModuleConfiguration, CustomPermission
 
@@ -137,6 +139,26 @@ def techno_representation(instance, data, is_form, serializer):
                 lst.append(value)
             data[k] = lst
     return data
+
+
+def custom_exception_handler(exc, context):
+    if isinstance(exc, ValidationError):
+        form_errors = dict()
+        for k, v in exc.detail.items():
+            if isinstance(v, list):
+                form_errors[k] = ', '.join(v)
+            elif isinstance(v, str):
+                form_errors[k] = v
+        return Response({'form_errors': form_errors}, status=exc.status_code)
+
+    response = exception_handler(exc, context)
+    if response is not None:
+        return response
+
+    file_path = 'error_log.txt'
+    with open(file_path, 'a' if os.path.exists(file_path) else 'w') as file:
+        file.write(str(exc))
+    return Response({'error': 'Something Went Wrong'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class ReactHookForm:
@@ -544,7 +566,7 @@ class TechnoCreateMixin:
         return Response({
             'data': self.get_list_serializer(inst).data if has_model_perm(
                 user=request.user, model=self.model, perm='view') else dict(),
-            'Success': f"{self.title} Created Successfully",
+            'message': f"{self.title} Created Successfully",
         }, status=status.HTTP_201_CREATED)
 
 
@@ -559,7 +581,7 @@ class TechnoUpdateMixin:
         return Response({
             'data': self.get_list_serializer(inst).data if has_model_perm(
                 user=request.user, model=self.model, perm='view') else dict(),
-            'Success': f"{self.title} Updated Successfully"
+            'message': f"{self.title} Updated Successfully"
         }, status=status.HTTP_200_OK)
 
 
