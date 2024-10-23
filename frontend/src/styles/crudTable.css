@@ -36,3 +36,8 @@ table {
     border: 1px solid #ccc;
     border-radius:   6px;
   } 
+
+  input[required], select[required]{
+    border: 1px solid red;
+  }
+
