@@ -1,6 +1,7 @@
 import inspect
 import json
 import os
+import traceback
 from collections import defaultdict
 
 from django.core.exceptions import ImproperlyConfigured
@@ -18,6 +19,14 @@ from rest_framework.serializers import ModelSerializer
 from rest_framework.views import exception_handler
 
 from app_system.models import ModuleConfiguration, CustomPermission
+
+
+def encrypt_id(rec_id):
+    return str(int(rec_id) + 270000981)
+
+
+def decrypt_id(rec_id):
+    return int(rec_id) - 270000981
 
 
 def get_field_verbose_name(model, field_name):
@@ -87,57 +96,21 @@ def has_model_perm(user, model, perm='any'):
 
 
 def techno_representation(instance, data, is_form, serializer):
-    data['rec_id'] = str(instance.pk + 270000981)
-    if hasattr(instance, 'salt'):
-        data['salt'] = instance.salt
-        data['nonce'] = instance.nonce
-        data['tag'] = instance.tag
+    data['rec_id'] = encrypt_id(instance.pk)
     for k, v in serializer.get_fields().items():
         if isinstance(v, ChoiceField):
-            value = getattr(instance, k, None)
-            if value:
-                if is_form:
-                    data[k] = {'value': value,
-                               'label': v.choices[value]}
-                else:
+            if is_form is False:
+                value = getattr(instance, k, None)
+                if value:
                     data[k] = v.choices[value]
         elif isinstance(v, PrimaryKeyRelatedField):
             inst = getattr(instance, k, None)
             if inst:
-                if is_form:
-                    if hasattr(inst, 'salt'):
-                        data[k] = {'value': str(inst.pk + 270000981),
-                                   'salt': inst.salt,
-                                   'nonce': inst.nonce,
-                                   'tag': inst.tag,
-                                   'label': str(inst)}
-                    else:
-                        data[k] = {'value': str(inst.pk + 270000981),
-                                   'label': str(inst)}
-                else:
-                    data[k] = str(inst)
+                data[k] = encrypt_id(inst.pk) if is_form else str(inst)
         elif isinstance(v, ManyRelatedField):
             qs = getattr(instance, k, None)
-            lst = []
-            for inst in qs.all():
-                if is_form:
-                    if hasattr(inst, 'salt'):
-                        value = {
-                               'value': str(inst.pk + 270000981),
-                               'salt': inst.salt,
-                               'nonce': inst.nonce,
-                               'tag': inst.tag,
-                               'label': str(inst)
-                           }
-                    else:
-                        value = {
-                            'value': str(inst.pk + 270000981),
-                            'label': str(inst)
-                        }
-                else:
-                    value = str(inst)
-                lst.append(value)
-            data[k] = lst
+            if qs and qs.exists():
+                data[k] = [encrypt_id(inst.pk) if is_form else str(inst) for inst in qs.all()]
     return data
 
 
@@ -157,7 +130,8 @@ def custom_exception_handler(exc, context):
 
     file_path = 'error_log.txt'
     with open(file_path, 'a' if os.path.exists(file_path) else 'w') as file:
-        file.write(str(exc))
+        file.write(f'Timestamp: {timezone.now()}\n')
+        file.write(f'Error Traceback: {traceback.format_exc()}\n\n')
     return Response({'error': 'Something Went Wrong'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -259,7 +233,7 @@ class ReactHookForm:
                 queryset = queryset.filter(is_del=False)
             data = []
             for inst in queryset:
-                dic = {'value': str(inst.pk + 270000981), 'label': str(inst)}
+                dic = {'value': encrypt_id(inst.pk), 'label': str(inst)}
                 if key in self.__select_options_func:
                     dic.update(**self.__select_options_func[key](inst))
                 if type(inst).__name__ == 'Tbl_Country_Code':
@@ -589,7 +563,13 @@ class TechnoUpdateMixin:
 class TechnoDeleteMixin:
 
     def soft_delete(self, request, *args, **kwargs):
-        self.get_object().delete()
+        record = self.get_object()
+        ids = [encrypt_id(record.pk)]
+        record.delete()
+        return Response({
+            'message': f'{self.title} Deleted Successfully',
+            'ids': ids,
+        }, status=status.HTTP_200_OK)
 
 
 class TechnoGenericBaseAPIView(GenericAPIView):
@@ -616,7 +596,7 @@ class TechnoGenericBaseAPIView(GenericAPIView):
 
     def get_object_lookup_kwargs(self):
         payload = self.get_request_data()
-        return dict(pk=int(payload['rec_id']) - 270000981)
+        return dict(pk=decrypt_id(payload['rec_id']))
 
     def get_object(self):
         return self.get_queryset().get(**self.get_object_lookup_kwargs())
@@ -646,7 +626,7 @@ class TechnoGenericBaseAPIView(GenericAPIView):
         return ReactHookForm(serializer=self.get_serializer_class()).get_configs()
 
     def get_request_data(self):
-        if self.request.method == 'GET':
+        if self.request.method in ['GET', 'DELETE']:
             return self.request.GET
         if self.request.method in ['PUT', 'POST']:
             return self.request.data
@@ -669,18 +649,10 @@ class TechnoGenericBaseAPIView(GenericAPIView):
         for k, v in serializer_class().get_fields().items():
             if k in data and data[k]:
                 if isinstance(v, PrimaryKeyRelatedField):
-                    data[k] = self.decrypt_id(data[k])
+                    data[k] = decrypt_id(data[k])
                 if isinstance(v, ManyRelatedField):
-                    data[k] = [self.decrypt_id(value) for value in data[k] if value]
+                    data[k] = [decrypt_id(value) for value in data[k] if value]
         return data
-
-    @staticmethod
-    def encrypt_id(rec_id):
-        return str(int(rec_id) + 270000981)
-
-    @staticmethod
-    def decrypt_id(rec_id):
-        return int(rec_id) - 270000981
 
 
 class TechnoGenericAPIView(TechnoFetchMixin,

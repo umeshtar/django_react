@@ -2,15 +2,16 @@ import React, { useEffect } from 'react';
 import '../styles/crudTable.css'
 import { useForm } from 'react-hook-form';
 import { useDispatch, useSelector } from 'react-redux';
-import { fetchEmployees, formResetDone, submitEmployeeForm } from '../features/Employee/employeeSlice';
+import { fetchEmployees, fetchSingleEmployee, formResetDone, createEmployee, updateEmployee, deleteEmployee } from '../features/Employee/employeeSlice';
 
 const FormComponent = () => {
     const formConfigs = useSelector((state) => state.employee.formConfigs)
 
-    const { register, handleSubmit, setError, reset, formState: { errors }, } = useForm({ mode: 'all', defaultValues: formConfigs.defaultValues })
+    const { register, handleSubmit, setValue, setError, reset, formState: { errors }, } = useForm({ mode: 'all', defaultValues: formConfigs.defaultValues })
 
     const formErrors = useSelector((state) => state.employee.formErrors)
     const resetForm = useSelector((state) => state.employee.resetForm)
+    const fetchedRecord = useSelector((state) => state.employee.fetchedRecord)
 
     const dispatch = useDispatch()
 
@@ -29,8 +30,25 @@ const FormComponent = () => {
         }
     }, [resetForm, reset, dispatch])
 
+    useEffect(() => {
+        if (fetchedRecord) {
+            for (let [key, value] of Object.entries(fetchedRecord)) {
+                setValue(key, value)
+            }
+        }
+    }, [fetchedRecord, setValue, dispatch])
+
     const handleFormSubmit = (data) => {
-        dispatch(submitEmployeeForm(data))
+        if (fetchedRecord) {
+            dispatch(updateEmployee(data))
+        } else {
+            dispatch(createEmployee(data))
+        }
+    }
+
+    const handleReset = () => {
+        reset()
+        dispatch(formResetDone())
     }
 
     return (
@@ -53,7 +71,8 @@ const FormComponent = () => {
                     </ React.Fragment>
                 )
             })}
-            <button>Submit</button>
+            <button> {fetchedRecord ? 'Update' : 'Submit'}</button>
+            <button type='button' onClick={handleReset} style={{ marginLeft: 10 }}>Cancel</button>
         </form >
     )
 }
@@ -62,13 +81,16 @@ const TableComponent = () => {
     const data = useSelector((state) => state.employee.data)
     const fields = useSelector((state) => state.employee.fields)
 
+    const dispatch = useDispatch()
+
     const handleEdit = (rec_id) => {
-        alert(rec_id)
+        dispatch(fetchSingleEmployee({ rec_id }))
     }
 
-    const handleDelete = (rec_id) => [
-        alert(rec_id)
-    ]
+    const handleDelete = (rec_id) => {
+        const isDelete = confirm('Are you Sure?')
+        if (isDelete) dispatch(deleteEmployee({ rec_id }))
+    }
 
     return (
         <table>
