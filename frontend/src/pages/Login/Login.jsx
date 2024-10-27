@@ -1,26 +1,32 @@
 import Cookies from "js-cookie"
 import { authFetch } from "../../helpers/fetch"
 import { useNavigate } from "react-router-dom"
-import { useEffect } from "react"
 
-const handleLogin = async (e) => {
-    e.preventDefault()
-    try {
-        const response = await authFetch.post('/token/', {
-            username: document.querySelector('input[name=username]').value,
-            password: document.querySelector('input[name=password]').value,
-        })
-        Cookies.set('authUser', JSON.stringify({
-            access: response.data.access,
-            refresh: response.data.refresh
-        }))
-        window.location.href = '/emp'
-    } catch (err) {
-        alert('Login Failed')
-    }
+export const handleLogout = () => {
+    Cookies.remove('authUser')
+    window.location.href = ''
 }
 
 export function Login() {
+    const navigate = useNavigate()
+
+    const handleLogin = async (e) => {
+        e.preventDefault()
+        try {
+            const response = await authFetch.post('/token/', {
+                username: document.querySelector('input[name=username]').value,
+                password: document.querySelector('input[name=password]').value,
+            })
+            Cookies.set('authUser', JSON.stringify({
+                access: response.data.access,
+                refresh: response.data.refresh
+            }))
+            window.location.href = '/dashboard'
+        } catch (err) {
+            alert('Login Failed')
+        }
+    }
+
     return (
         <form method="post" onSubmit={handleLogin}>
             <div>
@@ -35,17 +41,3 @@ export function Login() {
         </form>
     )
 }
-
-export function Logout() {
-    const navigate = useNavigate()
-    useEffect(() => {
-        Cookies.remove('authUser')
-        navigate('/login')
-    }, [])
-
-    return (
-        <h1>Log Out</h1>
-    )
-}
-
-

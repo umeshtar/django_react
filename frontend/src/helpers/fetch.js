@@ -25,12 +25,18 @@ authFetch.interceptors.response.use(
         if (error.response && error.response.status === 401 && !originalRequest._retry) {
             originalRequest._retry = true;
 
-            const isLoginUrl = error.response.config.url.includes("token")
+            const isLoginUrl = error.response.config.url === "/token/"
+            const isTokenRefreshUrl = error.response.config.url === "/token/refresh/"
+
             if (isLoginUrl) {
                 return Promise.reject(error)
             }
-            const isTokenRefreshUrl = error.response.config.url.includes("token/refresh/")
-            if (!isTokenRefreshUrl) {
+
+            else if (isTokenRefreshUrl) {
+                Cookies.remove("authUser");
+                window.location.href = "/login";
+
+            } else {
                 const authUser = JSON.parse(Cookies.get("authUser") || null)
                 if (authUser.refresh) {
                     try {
@@ -49,9 +55,6 @@ authFetch.interceptors.response.use(
                     }
                 }
 
-            } else {
-                Cookies.remove("authUser");
-                window.location.href = "/login";
             }
         }
         return Promise.reject(error);

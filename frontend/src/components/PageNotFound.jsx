@@ -2,7 +2,7 @@
 export function PageNotFound() {
     return (
         <>
-            <h6>Page Not Found</h6>
+            <h1>Page Not Found</h1>
         </>
     )
 }

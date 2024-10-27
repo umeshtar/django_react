@@ -1,9 +1,16 @@
-import '../styles/crudTable.css'
+import { useSelector } from 'react-redux'
+import '../styles/style.css'
 
-export function Loader() {
-    return (
-        <div class="loading-overlay" id="loading">
-            <div class="spinner"></div>
-        </div>
-    )
+export default function Loader() {
+    const activeRequests = useSelector((state) => state.loader.activeRequests)
+    return <>
+        {activeRequests.length > 0 && (
+            <div className="loading-overlay">
+                <div className="spinner"></div>
+            </div>
+        )}
+    </>
 }
+
+
+

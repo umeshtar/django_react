@@ -1,66 +1,42 @@
-import React, { useEffect } from 'react';
-import '../styles/crudTable.css'
+import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import '../styles/style.css'
 import { useForm } from 'react-hook-form';
 import { useDispatch, useSelector } from 'react-redux';
-import { fetchEmployees, fetchSingleEmployee, formResetDone, createEmployee, updateEmployee, deleteEmployee } from '../features/Employee/employeeSlice';
+import { Link } from 'react-router-dom';
+import { handleLogout } from '../pages/login/Login';
 
-const FormComponent = () => {
-    const formConfigs = useSelector((state) => state.employee.formConfigs)
+const FormComponent = forwardRef(({ formFields, createRecord, updateRecord }, ref) => {
+    console.log('Render - FormComponent');
+    const [action, setAction] = useState('Create')
 
-    const { register, handleSubmit, setValue, setError, reset, formState: { errors }, } = useForm({ mode: 'all', defaultValues: formConfigs.defaultValues })
+    const { register, handleSubmit, setValue, setError, clearErrors, reset, formState: { errors }, } = useForm({ mode: 'all', defaultValues: formFields.defaultValues })
 
-    const formErrors = useSelector((state) => state.employee.formErrors)
-    const resetForm = useSelector((state) => state.employee.resetForm)
-    const fetchedRecord = useSelector((state) => state.employee.fetchedRecord)
+    useImperativeHandle(ref, () => ({ setValue, clearErrors, setAction }));
 
     const dispatch = useDispatch()
-
-    useEffect(() => {
-        if (formErrors) {
-            for (let [name, error] of Object.entries(formErrors)) {
-                setError(name, { type: 'custom', message: error })
-            }
-        }
-    }, [formErrors, setError])
-
-    useEffect(() => {
-        if (resetForm === true) {
-            reset()
-            dispatch(formResetDone())
-        }
-    }, [resetForm, reset, dispatch])
-
-    useEffect(() => {
-        if (fetchedRecord) {
-            for (let [key, value] of Object.entries(fetchedRecord)) {
-                setValue(key, value)
-            }
-        }
-    }, [fetchedRecord, setValue, dispatch])
-
     const handleFormSubmit = (data) => {
-        if (fetchedRecord) {
-            dispatch(updateEmployee(data))
+        if (data.rec_id) {
+            dispatch(updateRecord({ ...data, setError, reset, setAction }))
         } else {
-            dispatch(createEmployee(data))
+            dispatch(createRecord({ ...data, setError, reset }))
         }
     }
 
     const handleReset = () => {
         reset()
-        dispatch(formResetDone())
+        setAction('Create')
     }
-
     return (
         <form onSubmit={handleSubmit(handleFormSubmit)} noValidate>
-            {Object.entries(formConfigs.fields).map(([name, configs], index) => {
+            {Object.entries(formFields.fields).map(([name, configs], index) => {
                 const required = configs.rules.required ? 'required' : ''
                 const errorMsg = errors[name]?.message
                 return (
                     <React.Fragment key={index}>
                         <p>
                             {configs.type === 'select' ? (
-                                <select {...register(name, configs.rules)} placeholder={`Select ${configs.name}`} required={required} >
+                                <select {...register(name, configs.rules)} required={required} >
+                                    <option value="" disabled>{`Select ${configs.name}`}</option>
                                     {configs.options.map((opt, i) => <option key={i} value={opt.value}>{opt.label}</option>)}
                                 </select>
                             ) : (
@@ -71,32 +47,33 @@ const FormComponent = () => {
                     </ React.Fragment>
                 )
             })}
-            <button> {fetchedRecord ? 'Update' : 'Submit'}</button>
+            <button>{action === 'Create' ? 'Submit' : 'Update'}</button>
             <button type='button' onClick={handleReset} style={{ marginLeft: 10 }}>Cancel</button>
         </form >
     )
-}
+})
 
-const TableComponent = () => {
-    const data = useSelector((state) => state.employee.data)
-    const fields = useSelector((state) => state.employee.fields)
+const TableComponent = ({ name, tableFields, formMethodsRef, fetchSingleRecord, deleteRecord }) => {
+    console.log('Render - TableComponent');
+    const data = useSelector((state) => state[name].data)
 
     const dispatch = useDispatch()
 
     const handleEdit = (rec_id) => {
-        dispatch(fetchSingleEmployee({ rec_id }))
+        const { setValue, clearErrors, setAction } = formMethodsRef.current
+        dispatch(fetchSingleRecord({ rec_id, setValue, clearErrors, setAction }))
     }
 
     const handleDelete = (rec_id) => {
         const isDelete = confirm('Are you Sure?')
-        if (isDelete) dispatch(deleteEmployee({ rec_id }))
+        if (isDelete) dispatch(deleteRecord({ rec_id }))
     }
 
     return (
         <table>
             <thead>
                 <tr>
-                    {Object.values(fields).map((label, headerIndex) => {
+                    {Object.values(tableFields).map((label, headerIndex) => {
                         return (
                             <th key={headerIndex}>{label}</th>
                         )
@@ -108,7 +85,7 @@ const TableComponent = () => {
                 {data.map((obj, rowIndex) => {
                     return (
                         <tr key={rowIndex}>
-                            {Object.keys(fields).map((key, dataIndex) => {
+                            {Object.keys(tableFields).map((key, dataIndex) => {
                                 return (
                                     <td key={dataIndex}>{obj[key]}</td>
                                 )
@@ -123,29 +100,39 @@ const TableComponent = () => {
     )
 }
 
-const TitleComponent = () => {
-    const title = useSelector((state) => state.employee.title)
+const TitleComponent = ({ title }) => {
+    console.log('Render - TitleComponent');
     return (
         <h4>{title}</h4>
     )
 }
 
-export function CrudComponent() {
-    const title = useSelector((state) => state.employee.title)
-    const formConfigs = useSelector((state) => state.employee.formConfigs)
-    const fields = useSelector((state) => state.employee.fields)
+export function CrudComponent({ name, fetchData, fetchSingleRecord, createRecord, updateRecord, deleteRecord }) {
+    console.log('Render - CrudComponent');
+
+    const formMethodsRef = useRef({})
+
+    const title = useSelector((state) => state[name].title)
+    const formFields = useSelector((state) => state[name].formFields)
+    const tableFields = useSelector((state) => state[name].tableFields)
 
     const dispatch = useDispatch()
     useEffect(() => {
-        dispatch(fetchEmployees())
+        dispatch(fetchData())
     }, [dispatch])
 
     return (
         <>
-            {title && <TitleComponent />}
-            {formConfigs && <FormComponent />}
+            <div>
+                <Link to="/dashboard">Dashboard</Link>
+            </div>
+            <div>
+                <button onClick={handleLogout}>Log out</button>
+            </div>
+            {title && <TitleComponent {...{ title }} />}
+            {formFields && <FormComponent ref={formMethodsRef} {...{ formFields, createRecord, updateRecord }} />}
             <hr />
-            {fields && <TableComponent />}
+            {tableFields && <TableComponent {...{ name, tableFields, formMethodsRef, fetchSingleRecord, deleteRecord }} />}
         </>
     )
 }

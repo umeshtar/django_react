@@ -1,26 +1,27 @@
 import { createBrowserRouter, Navigate, Outlet } from "react-router-dom";
 import { Home } from "../pages/Home/Home";
-import { Login, Logout } from "../pages/Login/Login";
+import { Login } from "../pages/login/Login";
 import Cookies from "js-cookie";
 import { PageNotFound } from "../components/PageNotFound";
-import { employeeRoutes } from "./emp.routes";
+import { employeeRoutes } from "./main/emp.routes";
+import { Dashboard } from "../pages/Dashboard/Dashboard";
 
-const authUser = Cookies.get('authUser')
+const authUser = Cookies.get("authUser")
 
 const publicRoutes = [
-    { path: '', element: <Home /> },
-    { path: 'login/', element: <Login /> },
+    { path: "", element: authUser ? <Navigate to="/dashboard" /> : <Home /> },
+    { path: "login", element: authUser ? <Navigate to="/dashboard" /> : <Login /> },
 ]
 
 const protectedRoutes = [
-    { path: 'logout/', element: <Logout /> },
-    { path: 'emp/', element: <Outlet />, children: employeeRoutes },
+    { path: "dashboard", element: <Dashboard /> },
+    { path: "emp", element: <Outlet />, children: employeeRoutes },
 ]
 
 export const router = createBrowserRouter([
     ...publicRoutes,
-    { path: '/', element: authUser ? <Outlet /> : <Navigate to="login/" />, children: protectedRoutes },
-    { path: '*', element: <PageNotFound /> },
+    { path: "", element: authUser ? <Outlet /> : <Navigate to="" />, children: protectedRoutes },
+    { path: "*", element: <PageNotFound /> },
 ])
 
 
