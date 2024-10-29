@@ -9,6 +9,9 @@ export function Dashboard() {
                 <Link to='/emp'> Employee </Link>
             </div>
             <div>
+                <Link to='/emp/dept'> Department </Link>
+            </div>
+            <div>
                 <button onClick={handleLogout}> Log Out </button>
             </div>
         </>

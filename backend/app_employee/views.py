@@ -1,5 +1,5 @@
-from app_employee.models import Employee
-from app_employee.serializers import EmployeeSerializer
+from app_employee.models import Employee, Department
+from app_employee.serializers import EmployeeSerializer, DepartmentSerializer
 from python_files.techno_generic import TechnoGenericAPIView
 
 
@@ -10,6 +10,10 @@ class EmployeeView(TechnoGenericAPIView):
     modules = ('Employee',)
 
 
+class DepartmentView(TechnoGenericAPIView):
+    model = Department
+    serializer_class = DepartmentSerializer
+    modules = ('Department',)
 
 
 

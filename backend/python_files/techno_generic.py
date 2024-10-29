@@ -6,7 +6,7 @@ from collections import defaultdict
 
 from django.core.exceptions import ImproperlyConfigured
 from django.core.files.uploadedfile import InMemoryUploadedFile
-from django.db.models import Q
+from django.db.models import Q, ProtectedError
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
@@ -123,6 +123,9 @@ def custom_exception_handler(exc, context):
             elif isinstance(v, str):
                 form_errors[k] = v
         return Response({'form_errors': form_errors}, status=exc.status_code)
+
+    if isinstance(exc, ProtectedError):
+        return Response({'message': 'Can not delete due to protected records'}, status=status.HTTP_400_BAD_REQUEST)
 
     response = exception_handler(exc, context)
     if response is not None:

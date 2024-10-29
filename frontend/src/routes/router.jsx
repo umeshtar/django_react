@@ -13,9 +13,9 @@ const publicRoutes = [
     { path: "login", element: authUser ? <Navigate to="/dashboard" /> : <Login /> },
 ]
 
-const protectedRoutes = [
+export const protectedRoutes = [
     { path: "dashboard", element: <Dashboard /> },
-    { path: "emp", element: <Outlet />, children: employeeRoutes },
+    { path: "emp/", element: <Outlet />, children: employeeRoutes },
 ]
 
 export const router = createBrowserRouter([

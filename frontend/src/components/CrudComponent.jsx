@@ -4,27 +4,37 @@ import { useForm } from 'react-hook-form';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
 import { handleLogout } from '../pages/login/Login';
+import { setFormErrors, setFormValues } from '../helpers/reactHookForm';
 
-const FormComponent = forwardRef(({ formFields, createRecord, updateRecord }, ref) => {
+const FormComponent = forwardRef(({ name, formFields, createRecord, updateRecord, resetForm }, ref) => {
     console.log('Render - FormComponent');
-    const [action, setAction] = useState('Create')
 
-    const { register, handleSubmit, setValue, setError, clearErrors, reset, formState: { errors }, } = useForm({ mode: 'all', defaultValues: formFields.defaultValues })
+    const mode = useSelector((state) => state[name].mode)
+    const reactHookForm = useForm({ mode: 'all', defaultValues: formFields.defaultValues })
+    const { register, handleSubmit, reset, formState: { errors } } = reactHookForm
 
-    useImperativeHandle(ref, () => ({ setValue, clearErrors, setAction }));
+    useImperativeHandle(ref, () => ({ reactHookForm }));
 
     const dispatch = useDispatch()
     const handleFormSubmit = (data) => {
-        if (data.rec_id) {
-            dispatch(updateRecord({ ...data, setError, reset, setAction }))
-        } else {
-            dispatch(createRecord({ ...data, setError, reset }))
+        if (mode === 'Update' && data.rec_id) {
+            dispatch(updateRecord({
+                ...data,
+                successCallBack: (response) => { reset() },
+                errorCallBack: (err) => setFormErrors({ reactHookForm, err })
+            }))
+        } else if (mode === 'Create') {
+            dispatch(createRecord({
+                ...data,
+                successCallBack: (response) => { reset() },
+                errorCallBack: (err) => setFormErrors({ reactHookForm, err })
+            }))
         }
     }
 
     const handleReset = () => {
         reset()
-        setAction('Create')
+        dispatch(resetForm())
     }
     return (
         <form onSubmit={handleSubmit(handleFormSubmit)} noValidate>
@@ -47,21 +57,24 @@ const FormComponent = forwardRef(({ formFields, createRecord, updateRecord }, re
                     </ React.Fragment>
                 )
             })}
-            <button>{action === 'Create' ? 'Submit' : 'Update'}</button>
+            <button>{mode === 'Create' ? 'Submit' : 'Update'}</button>
             <button type='button' onClick={handleReset} style={{ marginLeft: 10 }}>Cancel</button>
         </form >
     )
 })
 
-const TableComponent = ({ name, tableFields, formMethodsRef, fetchSingleRecord, deleteRecord }) => {
+const TableComponent = ({ name, tableFields, reactHookFormRef, fetchSingleRecord, deleteRecord }) => {
     console.log('Render - TableComponent');
     const data = useSelector((state) => state[name].data)
 
     const dispatch = useDispatch()
 
     const handleEdit = (rec_id) => {
-        const { setValue, clearErrors, setAction } = formMethodsRef.current
-        dispatch(fetchSingleRecord({ rec_id, setValue, clearErrors, setAction }))
+        const { reactHookForm } = reactHookFormRef.current
+        dispatch(fetchSingleRecord({
+            rec_id,
+            successCallBack: (response) => setFormValues({ reactHookForm, response })
+        }))
     }
 
     const handleDelete = (rec_id) => {
@@ -107,10 +120,10 @@ const TitleComponent = ({ title }) => {
     )
 }
 
-export function CrudComponent({ name, fetchData, fetchSingleRecord, createRecord, updateRecord, deleteRecord }) {
+export function CrudComponent({ name, fetchData, fetchSingleRecord, createRecord, updateRecord, deleteRecord, resetForm }) {
     console.log('Render - CrudComponent');
 
-    const formMethodsRef = useRef({})
+    const reactHookFormRef = useRef({})
 
     const title = useSelector((state) => state[name].title)
     const formFields = useSelector((state) => state[name].formFields)
@@ -130,9 +143,9 @@ export function CrudComponent({ name, fetchData, fetchSingleRecord, createRecord
                 <button onClick={handleLogout}>Log out</button>
             </div>
             {title && <TitleComponent {...{ title }} />}
-            {formFields && <FormComponent ref={formMethodsRef} {...{ formFields, createRecord, updateRecord }} />}
+            {formFields && <FormComponent ref={reactHookFormRef} {...{ name, formFields, createRecord, updateRecord, resetForm }} />}
             <hr />
-            {tableFields && <TableComponent {...{ name, tableFields, formMethodsRef, fetchSingleRecord, deleteRecord }} />}
+            {tableFields && <TableComponent {...{ name, tableFields, reactHookFormRef, fetchSingleRecord, deleteRecord }} />}
         </>
     )
 }

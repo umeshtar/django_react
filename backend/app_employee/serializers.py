@@ -11,3 +11,10 @@ class EmployeeSerializer(TechnoModelSerializer):
         self.tsv.check_exists('name')
 
 
+class DepartmentSerializer(TechnoModelSerializer):
+    class Meta:
+        model = Department
+        fields = ['name']
+
+    def techno_validate(self, attrs: dict):
+        self.tsv.check_exists('name')
