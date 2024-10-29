@@ -41,7 +41,7 @@ export const createCrudAsyncThunk = ({ name, url }) => {
     }
 }
 
-export const createCrudSlice = ({ name, initialState = {}, reducers = {}, extraReducerCases = {}, extraReducerMatches = {} }) => {
+export const createCrudSlice = ({ name, initialState = {}, reducers = {}, extraReducerCases = [], extraReducerMatches = [] }) => {
     return createSlice({
         name,
         initialState: {
@@ -80,12 +80,12 @@ export const createCrudSlice = ({ name, initialState = {}, reducers = {}, extraR
                 .addCase(`${name}/deleteRecord/fulfilled`, (state, action) => {
                     state.data = state.data.filter(obj => !action.payload.ids.includes(obj.rec_id))
                 })
-            Object.entries(extraReducerCases).forEach(([type, reducer]) => {
-                builder.addCase(type, reducer);
-            });
-            Object.entries(extraReducerMatches).forEach(([type, reducer]) => {
-                builder.addMatcher(type, reducer);
-            });
+            extraReducerCases.forEach((obj) => {
+                builder.addCase(obj.case, obj.reducer)
+            })
+            extraReducerMatches.forEach((obj) => {
+                builder.addMatcher(obj.match, obj.reducer)
+            })
         }
     })
 }
