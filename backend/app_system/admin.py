@@ -19,6 +19,7 @@ admin.site.register(SystemConfiguration, RecurAdmin)
 admin.site.register(CustomPermission, RecurAdmin)
 admin.site.register(Permission)
 admin.site.register(ContentType)
+admin.site.register(Attachment, RecurAdmin)
 
 
 @admin.register(ModuleConfiguration)

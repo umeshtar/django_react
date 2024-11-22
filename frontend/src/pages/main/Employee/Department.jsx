@@ -3,7 +3,7 @@ import { api } from "../../../slices/main/employee/departmentSlice";
 
 export const Department = () => {
     return (
-        <CrudComponent name='department' {...api} />
+        <CrudComponent name='department' api={api} />
     )
 }
 

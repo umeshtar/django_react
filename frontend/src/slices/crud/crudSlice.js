@@ -49,13 +49,12 @@ export const createCrudSlice = ({ name, initialState = {}, reducers = {}, extraR
             data: [],
             tableFields: undefined,
             formFields: undefined,
+            permissions: {},
             mode: 'Create',
             ...initialState,
         },
         reducers: {
-            resetForm: (state, action) => {
-                state.mode = 'Create'
-            },
+            resetForm: (state, action) => { state.mode = 'Create' },
             ...reducers
         },
         extraReducers: (builder) => {
@@ -65,6 +64,7 @@ export const createCrudSlice = ({ name, initialState = {}, reducers = {}, extraR
                     state.data = action.payload.data
                     state.tableFields = action.payload.fields
                     state.formFields = action.payload.form_configs
+                    state.permissions = action.payload.permissions
                 })
                 .addCase(`${name}/fetchSingleRecord/fulfilled`, (state, action) => {
                     state.mode = 'Update'
