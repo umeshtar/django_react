@@ -4,9 +4,21 @@ from django.contrib.auth.models import User, Group, Permission
 from django.db import models
 
 
+class RecurManager(models.Manager):
+    def get_queryset(self):
+        return super().get_queryset().filter(is_del=False)
+
+
+class AdminManager(models.Manager):
+
+    def get_queryset(self):
+        return super().get_queryset()
+
+
 # Create your models here.
 class RecurField(models.Model):
-    objects = models.Manager()
+    objects = RecurManager()
+    admin_objects = AdminManager()
     add_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="%(app_label)s%(class)sadd")
     modify_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="%(app_label)s%(class)schange")
     delete_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="%(app_label)s%(class)sdelete")

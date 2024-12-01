@@ -1,10 +1,11 @@
 import React, { createContext, forwardRef, useCallback, useContext, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import '../styles/style.css'
-import { useForm } from 'react-hook-form';
+import { useFieldArray, useForm } from 'react-hook-form';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
 import { handleLogout } from '../pages/login/Login';
 import { setFormErrors, setFormValues } from '../helpers/reactHookForm';
+import { ErrorMessage } from '@hookform/error-message';
 
 
 const ApiContext = createContext(null)
@@ -46,7 +47,11 @@ const FormComponent = forwardRef(({ formFields }, ref) => {
     const mode = useSelector((state) => state[name].mode)
     const { __add, __change } = useSelector((state) => state[name].permissions)
     const reactHookForm = useForm({ mode: 'all', defaultValues: formFields.defaultValues })
-    const { register, handleSubmit, reset, formState: { errors } } = reactHookForm
+    const { register, control, handleSubmit, reset, formState: { errors } } = reactHookForm
+
+    const employees = useFieldArray({ name: 'employees', control })
+    const candidates = useFieldArray({ name: 'candidates', control })
+    const sections = useFieldArray({ name: 'sections', control })
 
     useImperativeHandle(ref, () => ({ reactHookForm }));
 
@@ -72,8 +77,84 @@ const FormComponent = forwardRef(({ formFields }, ref) => {
         dispatch(resetForm())
     }
     return (
-        <form onSubmit={handleSubmit(handleFormSubmit)} noValidate>
-            {Object.entries(formFields.fields).map(([name, configs], index) => <FormField key={index} {...{ register, name, configs, errors }} />)}
+        <form style={{ gap: 3 }} onSubmit={handleSubmit(handleFormSubmit)} noValidate>
+            <div style={{ marginBottom: '20px' }}>
+                {Object.entries(formFields.fields).map(([name, configs], index) => {
+                    return (
+                        <FormField key={index} {...{ register, name, configs, errors }} />
+                    )
+                })}
+            </div>
+            <div style={{ display: 'flex', marginBottom: '20px' }}>
+                <div>
+                    {employees.fields.map((field, index) => {
+                        return (
+                            <div key={field.id} style={{ marginBottom: '20px' }}>
+                                <div>
+                                    <input {...register(`employees.${index}.name`)} placeholder='Enter Employee Name' />
+                                    <button type="button" onClick={() => employees.remove(index)}>Delete</button>
+                                </div>
+                                <div>
+                                    <ErrorMessage errors={errors} name={`employees.${index}.name`} />
+                                </div>
+                            </div>
+                        )
+                    })}
+                </div>
+                <div>
+                    <button type="button" onClick={() => employees.append(formFields.repeaters.employees.defaultValues)}>Add Employee</button>
+                </div>
+                <div>
+                    <ErrorMessage errors={errors} name="employees" />
+                </div>
+            </div>
+            <div style={{ display: 'flex', marginBottom: '20px' }}>
+                <div>
+                    <ErrorMessage errors={errors} name="candidates" />
+                </div>
+                <div>
+                    {candidates.fields.map((field, index) => {
+                        return (
+                            <div key={field.id} style={{ marginBottom: '20px' }}>
+                                <div>
+                                    <input {...register(`candidates.${index}.name`)} placeholder='Enter Candidate Name' />
+                                    <button type="button" onClick={() => candidates.remove(index)}>Delete</button>
+                                </div>
+                                <div>
+                                    <ErrorMessage errors={errors} name={`candidates.${index}.name`} />
+                                </div>
+                            </div>
+                        )
+                    })}
+                </div>
+                <div>
+                    <button type='button' onClick={() => candidates.append(formFields.repeaters.candidates.defaultValues)}>Add Candidate</button>
+                </div>
+            </div>
+            <div style={{ display: 'flex', marginBottom: '20px' }}>
+                <div>
+                    <ErrorMessage errors={errors} name="sections" />
+                </div>
+                <div>
+                    {sections.fields.map((field, index) => {
+                        return (
+                            <div key={field.id} style={{ marginBottom: '20px' }}>
+                                <div>
+                                    <input {...register(`sections.${index}.name`)} placeholder='Enter Section Name' />
+                                    <button type="button" onClick={() => sections.remove(index)}>Delete</button>
+                                </div>
+                                <div>
+                                    <ErrorMessage errors={errors} name={`sections.${index}.name`} />
+                                </div>
+                            </div>
+                        )
+                    })}
+                </div>
+                <div className="">
+                    <button type='button' onClick={() => sections.append(formFields.repeaters.sections.defaultValues)}>Add Section</button>
+                </div>
+            </div>
+
             <button>{mode === 'Create' ? 'Submit' : 'Update'}</button>
             <button type='button' onClick={handleReset} style={{ marginLeft: 10 }}>Cancel</button>
         </form >

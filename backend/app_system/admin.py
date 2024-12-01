@@ -10,9 +10,16 @@ class RecurAdmin(admin.ModelAdmin):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.list_display = ('id',) + self.list_display + ('is_del',)
+        self.list_display = ('id',) + self.list_display + ('add_by', 'modify_by', 'is_del')
         self.list_filter = self.list_filter + ('is_del',)
         self.list_editable = self.list_editable + ('is_del',)
+
+    def get_queryset(self, request):
+        qs = self.model.admin_objects.get_queryset()
+        ordering = self.ordering or ()
+        if ordering:
+            qs = qs.order_by(*ordering)
+        return qs
 
 
 admin.site.register(SystemConfiguration, RecurAdmin)

@@ -114,6 +114,25 @@ def techno_representation(instance, data, is_form, serializer):
     return data
 
 
+def decrypt_post_data(data, serializer_class=None, fks=(), m2m=()):
+    fks = list(fks)
+    m2m = list(m2m)
+    if serializer_class:
+        for k, v in serializer_class().get_fields().items():
+            if isinstance(v, PrimaryKeyRelatedField):
+                fks.append(k)
+            if isinstance(v, ManyRelatedField):
+                m2m.append(k)
+    for k in fks:
+        if k in data and data[k]:
+            data[k] = decrypt_id(data[k])
+
+    for k in m2m:
+        if k in data and data[k]:
+            data[k] = [decrypt_id(value) for value in data[k] if value]
+    return data
+
+
 def custom_exception_handler(exc, context):
     if isinstance(exc, ValidationError):
         form_errors = dict()
@@ -127,6 +146,9 @@ def custom_exception_handler(exc, context):
     if isinstance(exc, ProtectedError):
         return Response({'message': 'Can not delete due to protected records'}, status=status.HTTP_400_BAD_REQUEST)
 
+    if isinstance(exc, ClientException):
+        return Response({'message': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
     response = exception_handler(exc, context)
     if response is not None:
         return response
@@ -135,7 +157,11 @@ def custom_exception_handler(exc, context):
     with open(file_path, 'a' if os.path.exists(file_path) else 'w') as file:
         file.write(f'Timestamp: {timezone.now()}\n')
         file.write(f'Error Traceback: {traceback.format_exc()}\n\n')
-    return Response({'error': 'Something Went Wrong'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    return Response({'message': 'Something Went Wrong'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class ClientException(Exception):
+    pass
 
 
 class ReactHookForm:
@@ -161,9 +187,15 @@ class ReactHookForm:
     def __init__(self, serializer):
         self.__serializer = serializer()
         self.__select_options_func = dict()
+        self.__verbose_name = dict()
 
     def set_select_options_func(self, **kwargs):
         self.__select_options_func.update(kwargs)
+        return self
+
+    def set_verbose_name(self, **kwargs):
+        self.__verbose_name.update(kwargs)
+        return self
 
     def get_configs(self, fields=(), exclude=(), ignore_recur_fields=True):
         configs = dict()
@@ -176,7 +208,10 @@ class ReactHookForm:
         if exclude:
             serializer_fields = {k: v for k, v in serializer_fields.items() if k not in exclude}
         for key, field in serializer_fields.items():
-            field_name = get_field_verbose_name(model=self.__serializer.Meta.model, field_name=key)
+            if key in self.__verbose_name:
+                field_name = self.__verbose_name[key]
+            else:
+                field_name = get_field_verbose_name(model=self.__serializer.Meta.model, field_name=key)
             configs[key] = dict()
             configs[key]['type'] = field_type = self.__get_field_type(field)
             configs[key]['name'] = field_name
@@ -277,10 +312,14 @@ class TechnoSerializerValidation:
         self.__country_code.update(**kwargs)
 
     def get_enc_attrs(self):
-        return self.__enc_attrs
+        enc_attrs = self.__enc_attrs
+        self.__enc_attrs = dict()
+        return enc_attrs
 
     def get_custom_errors(self):
-        return self.__custom_errors
+        custom_errors = self.__custom_errors
+        self.__custom_errors = defaultdict(list)
+        return custom_errors
 
     def __get_verbose_name(self, name):
         return self.__model._meta.get_field(name).verbose_name.capitalize()
@@ -392,6 +431,12 @@ class TechnoModelSerializer(ModelSerializer):
         enc_attrs = self.tsv.get_enc_attrs()
         if enc_attrs:
             kwargs.update(enc_attrs)
+        request = self.context.get('request', None)
+        if request and request.user and request.user.is_authenticated:
+            if self.instance:
+                kwargs['modify_by'] = request.user
+            else:
+                kwargs['add_by'] = request.user
         return super().save(**kwargs)
 
     def to_representation(self, instance):
@@ -506,10 +551,17 @@ class TechnoFetchMixin:
                 response['permissions']['__custom'] = custom_perms
 
         if get_fields:
-            response['fields'] = {
-                field_name: get_field_verbose_name(self.model, field_name)
-                for field_name in self.get_list_serializer_class().Meta.fields
-            } if can_view else dict()
+            if can_view:
+                fields = self.get_list_serializer_class().Meta.fields
+                extra_kwargs = getattr(self.get_list_serializer_class().Meta, 'extra_kwargs', dict())
+                response['fields'] = {
+                    field_name: extra_kwargs[field_name]['label']
+                    if field_name in extra_kwargs and 'label' in extra_kwargs[field_name]
+                    else get_field_verbose_name(self.model, field_name)
+                    for field_name in fields
+                }
+            else:
+                response['fields'] = dict()
 
         if form_configs:
             response['form_configs'] = self.get_form_configs() if (can_create or can_update) else dict()
@@ -538,11 +590,10 @@ class TechnoCreateMixin:
     def create(self, request, *args, **kwargs):
         s = self.get_serializer(data=self.get_post_data())
         s.is_valid(raise_exception=True)
-        s.add_by = request.user
-        inst = s.save()
+        record = s.save()
         return Response({
-            'data': self.get_list_serializer(inst).data if has_model_perm(
-                user=request.user, model=self.model, perm='view') else dict(),
+            'data': self.get_list_serializer(record).data if has_model_perm(
+                user=self.request.user, model=self.model, perm='view') else dict(),
             'message': f"{self.title} Created Successfully",
         }, status=status.HTTP_201_CREATED)
 
@@ -553,7 +604,6 @@ class TechnoUpdateMixin:
     def update(self, request, *args, **kwargs):
         s = self.get_serializer(data=self.get_post_data(), instance=self.get_object())
         s.is_valid(raise_exception=True)
-        s.modify_by = self.request.user
         inst = s.save()
         return Response({
             'data': self.get_list_serializer(inst).data if has_model_perm(
@@ -648,13 +698,8 @@ class TechnoGenericBaseAPIView(GenericAPIView):
                         data[k] = f
         else:
             data = request_data
-        serializer_class = self.get_serializer_class()
-        for k, v in serializer_class().get_fields().items():
-            if k in data and data[k]:
-                if isinstance(v, PrimaryKeyRelatedField):
-                    data[k] = decrypt_id(data[k])
-                if isinstance(v, ManyRelatedField):
-                    data[k] = [decrypt_id(value) for value in data[k] if value]
+
+        data = decrypt_post_data(data, serializer_class=self.get_serializer_class())
         return data
 
 
