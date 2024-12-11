@@ -26,7 +26,7 @@ urlpatterns = [
     path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('employee/', include('app_employee.urls', namespace='employee')),
-    path('company/', include('app_company.urls', namespace='company')),
+    path('task/', include('app_task.urls', namespace='task')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 

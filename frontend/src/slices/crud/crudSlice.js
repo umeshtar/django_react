@@ -1,7 +1,7 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit'
 import { authFetch } from '../../helpers/fetch'
 
-export const baseAsyncThunk = ({ name, action, func }) => {
+export function baseAsyncThunk({ name, action, func }) {
     return createAsyncThunk(`${name}/${action}`, async ({ successCallBack, errorCallBack, ...data } = {}, { rejectWithValue }) => {
         try {
             const response = await func(data)
@@ -16,37 +16,55 @@ export const baseAsyncThunk = ({ name, action, func }) => {
     })
 }
 
-export const createCrudAsyncThunk = ({ name, url }) => {
-    return {
-        fetchData: baseAsyncThunk({
-            name, action: 'fetchData',
-            func: (data) => authFetch.get(url, { params: { get_crud_configs: true, ...data } })
-        }),
-        fetchSingleRecord: baseAsyncThunk({
-            name, action: 'fetchSingleRecord',
-            func: (data) => authFetch.get(url, { params: { action: 'fetch_record', is_form: true, ...data } })
-        }),
-        createRecord: baseAsyncThunk({
-            name, action: 'createRecord',
-            func: (data) => authFetch.post(url, data)
-        }),
-        updateRecord: baseAsyncThunk({
-            name, action: 'updateRecord',
-            func: (data) => authFetch.put(url, data)
-        }),
-        deleteRecord: baseAsyncThunk({
-            name, action: 'deleteRecord',
-            func: (data) => authFetch.delete(url, { params: { ...data } })
-        }),
-    }
+export function fetchDataThunk({ name, url }) {
+    return baseAsyncThunk({ name, action: 'fetchData', func: (data) => authFetch.get(url, { params: { get_crud_configs: true, ...data } }) })
 }
 
-export const createCrudSlice = ({ name, initialState = {}, reducers = {}, extraReducerCases = [], extraReducerMatches = [] }) => {
+export function fetchSingleRecordThunk({ name, url }) {
+    return baseAsyncThunk({ name, action: 'fetchSingleRecord', func: (data) => authFetch.get(url, { params: { action: 'fetch_record', is_form: true, ...data } }) })
+}
+
+export function createRecordThunk({ name, url }) {
+    return baseAsyncThunk({ name, action: 'createRecord', func: (data) => authFetch.post(url, data) })
+}
+
+export function updateRecordThunk({ name, url }) {
+    return baseAsyncThunk({ name, action: 'updateRecord', func: (data) => authFetch.put(url, data) })
+}
+
+export function deleteRecordThunk({ name, url }) {
+    return baseAsyncThunk({ name, action: 'deleteRecord', func: (data) => authFetch.delete(url, { params: { ...data } }) })
+}
+
+export function handleFormSubmit({ name, url, data, reset, setError, dispatch, successCallBack, errorCallBack }) {
+    let api = data.rec_id ? updateRecordThunk({ name, url }) : createRecordThunk({ name, url })
+    dispatch(api({
+        ...data,
+        successCallBack: (response) => {
+            if (reset) reset()
+            if (successCallBack) successCallBack(response)
+        },
+        errorCallBack: (err) => {
+            if (err.name === "AxiosError" && setError) {
+                const { form_errors: formErrors } = err.response.data
+                if (formErrors) {
+                    Object.entries(formErrors).forEach(([key, value]) => {
+                        setError(key, { type: 'custom', message: value })
+                    })
+                }
+            }
+            if (errorCallBack) errorCallBack(err)
+        }
+    }))
+}
+
+export function createCrudSlice({ name, initialState = {}, reducers = {}, extraReducerCases = [], extraReducerMatches = [] }) {
     return createSlice({
         name,
         initialState: {
             title: '',
             data: [],
+            record: undefined,
             tableFields: undefined,
             formFields: undefined,
             permissions: {},
@@ -54,7 +72,10 @@ export const createCrudSlice = ({ name, initialState = {}, reducers = {}, extraR
             ...initialState,
         },
         reducers: {
-            resetForm: (state, action) => { state.mode = 'Create' },
+            resetForm: (state, action) => {
+                state.mode = 'Create'
+                state.record = undefined
+            },
             ...reducers
         },
         extraReducers: (builder) => {
@@ -68,6 +89,7 @@ export const createCrudSlice = ({ name, initialState = {}, reducers = {}, extraR
                 })
                 .addCase(`${name}/fetchSingleRecord/fulfilled`, (state, action) => {
                     state.mode = 'Update'
+                    state.record = action.payload.data
                 })
                 .addCase(`${name}/createRecord/fulfilled`, (state, action) => {
                     state.data.push(action.payload.data)
@@ -76,6 +98,7 @@ export const createCrudSlice = ({ name, initialState = {}, reducers = {}, extraR
                     const newData = action.payload.data
                     state.data = state.data.map(obj => obj.rec_id === newData.rec_id ? newData : obj)
                     state.mode = 'Create'
+                    state.record = undefined
                 })
                 .addCase(`${name}/deleteRecord/fulfilled`, (state, action) => {
                     state.data = state.data.filter(obj => !action.payload.ids.includes(obj.rec_id))

@@ -42,7 +42,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'app_system',
     'app_employee',
-    'app_company',
+    'app_task',
 ]
 
 MIDDLEWARE = [
@@ -112,7 +112,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Kolkata'
 
 USE_I18N = True
 
