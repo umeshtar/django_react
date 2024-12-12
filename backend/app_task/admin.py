@@ -1,5 +1,7 @@
+from datetime import timedelta
+
 from django.contrib import admin
-from django.contrib.admin import TabularInline, ModelAdmin
+from django.contrib.admin import TabularInline, ModelAdmin, SimpleListFilter
 from django.db.models import Case, When, IntegerField
 from django.utils import timezone
 
@@ -28,10 +30,44 @@ class ExtensionInline(TabularInline):
     fields = ('name', 'past_deadline', 'new_deadline')
 
 
+class DeadlineFilter(SimpleListFilter):
+    title = "Filter by Deadline"
+    parameter_name = "deadline"
+
+    def lookups(self, request, model_admin):
+        return [
+            ("today", "Today"),
+            ("tomorrow", "Tomorrow"),
+            ("next_3_days", "Next 3 Days"),
+            ("next_7_days", "Next 7 Days"),
+            ("next_15_days", "Next 15 Days"),
+            ("next_30_days", "Next 30 Days"),
+            ("this_month", "This Month"),
+        ]
+
+    def queryset(self, request, queryset):
+        current = timezone.now()
+        if self.value() == "today":
+            return queryset.filter(deadline=current)
+        if self.value() == "tomorrow":
+            return queryset.filter(deadline=current + timedelta(days=1))
+        if self.value() == 'next_3_days':
+            return queryset.filter(deadline__lte=current + timedelta(days=2))
+        if self.value() == 'next_7_days':
+            return queryset.filter(deadline__lte=current + timedelta(days=6))
+        if self.value() == 'next_15_days':
+            return queryset.filter(deadline__lte=current + timedelta(days=14))
+        if self.value() == 'next_30_days':
+            return queryset.filter(deadline__lte=current + timedelta(days=30))
+        if self.value() == 'this_month':
+            return queryset.filter(deadline__month=current.month)
+        return queryset
+
+
 @admin.register(Task)
 class TaskAdmin(ModelAdmin):
     list_display = ('id', 'name', 'tag', 'status', 'deadline', 'start_time', 'completion_time', 'extensions')
-    list_filter = ('status', 'tag', 'deadline')
+    list_filter = ('status', 'tag', DeadlineFilter)
     exclude = ('status',)
     inlines = [ExtensionInline]
     actions = [refresh_task_status]
@@ -50,4 +86,5 @@ class TaskAdmin(ModelAdmin):
                 output_field=IntegerField()
             )
         ).order_by('status_order', 'deadline')
+
 
