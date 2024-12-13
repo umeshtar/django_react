@@ -11,11 +11,9 @@ function DepartmentForm({ name, url, formFields, permissions }) {
     const mode = useSelector((state) => state[name].mode)
     const record = useSelector((state) => state[name].record)
     const { __add, __change } = permissions
-    console.log({ record: mode === 'Update' ? record : formFields.defaultValues });
 
     const { register, control, handleSubmit, reset, setError, formState: { errors } } = useForm({
-        mode: 'all',
-        defaultValues: mode === 'Update' ? record : formFields.defaultValues
+        defaultValues: record || formFields.defaultValues
     })
     const employees = useFieldArray({ name: 'employees', control })
 
