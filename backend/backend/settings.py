@@ -30,6 +30,8 @@ CORS_ORIGIN_ALLOW_ALL = True
 
 
 # Application definition
+AUTH_USER_MODEL = 'app_system.CustomUser'
+Django_Mode = 'Development'
 
 INSTALLED_APPS = [
     'django.contrib.admin',

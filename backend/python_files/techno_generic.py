@@ -6,11 +6,12 @@ from collections import defaultdict
 
 from django.core.exceptions import ImproperlyConfigured
 from django.core.files.uploadedfile import InMemoryUploadedFile
+from django.core.validators import FileExtensionValidator
 from django.db.models import Q, ProtectedError
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
-from rest_framework.fields import ChoiceField
+from rest_framework.fields import ChoiceField, IntegerField, FloatField, DecimalField
 from rest_framework.generics import GenericAPIView
 from rest_framework.permissions import IsAuthenticated, DjangoModelPermissions
 from rest_framework.relations import PrimaryKeyRelatedField, ManyRelatedField
@@ -19,6 +20,7 @@ from rest_framework.serializers import ModelSerializer
 from rest_framework.views import exception_handler
 
 from app_system.models import ModuleConfiguration, CustomPermission
+from backend.settings import Django_Mode
 
 
 def encrypt_id(rec_id):
@@ -71,30 +73,6 @@ def get_modules_data(user):
     return get_recur_modules(main_modules)
 
 
-def has_model_perm(user, model, perm='any'):
-    app_label = model._meta.app_label
-    model_name = model._meta.model_name
-    perm_code = f"{app_label}.{{perm}}_{model_name}"
-
-    if perm == 'any':
-        return any([
-            user.has_perm(perm_code.format(perm='view')),
-            user.has_perm(perm_code.format(perm='add')),
-            user.has_perm(perm_code.format(perm='change')),
-            user.has_perm(perm_code.format(perm='delete')),
-        ])
-
-    if perm == 'all':
-        return all([
-            user.has_perm(perm_code.format(perm='view')),
-            user.has_perm(perm_code.format(perm='add')),
-            user.has_perm(perm_code.format(perm='change')),
-            user.has_perm(perm_code.format(perm='delete')),
-        ])
-
-    return user.has_perm(perm_code.format(perm=perm))
-
-
 def techno_representation(instance, data, is_form, serializer):
     data['rec_id'] = encrypt_id(instance.pk)
     for k, v in serializer.get_fields().items():
@@ -114,22 +92,40 @@ def techno_representation(instance, data, is_form, serializer):
     return data
 
 
-def decrypt_post_data(data, serializer_class=None, fks=(), m2m=()):
-    fks = list(fks)
-    m2m = list(m2m)
-    if serializer_class:
-        for k, v in serializer_class().get_fields().items():
-            if isinstance(v, PrimaryKeyRelatedField):
-                fks.append(k)
-            if isinstance(v, ManyRelatedField):
-                m2m.append(k)
+def handle_payload_with_files(data):
+    """
+        It is assumed that when content-type is multipart/form-data
+        data other than files are sent as json dumps data with key 'data'
+        and all files are sent by flatten key
+     """
+    payload = json.loads(data.get('data'))
+    for k, v in data.items():
+        if type(v) == InMemoryUploadedFile:
+            payload[k] = v
+    # Need to test clear functionality
+    # for k in data:
+    #     if f'{k}-clear' in data and data[f'{k}-clear'] is True:
+    #         data[k] = None
+    return payload
+
+
+def handle_payload_with_encryption(data, serializer_class=None, foreign_keys=(), m2m_relations=()):
+    fks, m2m = [], []
+    fks.extend(foreign_keys)
+    m2m.extend(m2m_relations)
+    if serializer_class is not None:
+        fields = serializer_class().get_fields().items()
+        fks.extend([k for k, v in fields if isinstance(v, PrimaryKeyRelatedField)])
+        m2m.extend([k for k, v in fields if isinstance(v, ManyRelatedField)])
+
     for k in fks:
         if k in data and data[k]:
             data[k] = decrypt_id(data[k])
 
     for k in m2m:
-        if k in data and data[k]:
-            data[k] = [decrypt_id(value) for value in data[k] if value]
+        if k in data and data[k] and isinstance(data[k], list):
+            data[k] = [decrypt_id(row) for row in data[k]]
+
     return data
 
 
@@ -141,7 +137,7 @@ def custom_exception_handler(exc, context):
                 form_errors[k] = ', '.join(v)
             elif isinstance(v, str):
                 form_errors[k] = v
-        return Response({'form_errors': form_errors}, status=exc.status_code)
+        return Response({'form_errors': form_errors}, status=status.HTTP_400_BAD_REQUEST)
 
     if isinstance(exc, ProtectedError):
         return Response({'message': 'Can not delete due to protected records'}, status=status.HTTP_400_BAD_REQUEST)
@@ -155,6 +151,7 @@ def custom_exception_handler(exc, context):
 
     file_path = 'error_log.txt'
     with open(file_path, 'a' if os.path.exists(file_path) else 'w') as file:
+        # Additionally Notify Developer by Task and/or Email as per configuration
         file.write(f'Timestamp: {timezone.now()}\n')
         file.write(f'Error Traceback: {traceback.format_exc()}\n\n')
     return Response({'message': 'Something Went Wrong'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -165,6 +162,7 @@ class ClientException(Exception):
 
 
 class ReactHookForm:
+    __stop_mode = False
     __field_types = {
         'CharField': 'text',
         'URLField': 'url',
@@ -182,12 +180,16 @@ class ReactHookForm:
         'ImageField': 'file',
         'FileField': 'file',
     }
-    __recur_field_list = ['add_by', 'modify_by', 'delete_by', 'is_del', 'add_date', 'modify_date', 'delete_date']
 
-    def __init__(self, serializer):
+    def __init__(self, serializer, repeater_name=''):
         self.__serializer = serializer()
         self.__select_options_func = dict()
         self.__verbose_name = dict()
+        self.__options = dict()
+        self.__label = dict()
+        self.__repeater_name = repeater_name
+        if not Django_Mode == 'Development':
+            self.__stop_mode = False
 
     def set_select_options_func(self, **kwargs):
         self.__select_options_func.update(kwargs)
@@ -197,12 +199,18 @@ class ReactHookForm:
         self.__verbose_name.update(kwargs)
         return self
 
-    def get_configs(self, fields=(), exclude=(), ignore_recur_fields=True):
+    def set_options(self, **kwargs):
+        self.__options.update(kwargs)
+        return self
+
+    def set_label(self, **kwargs):
+        self.__label.update(kwargs)
+        return self
+
+    def get_configs(self, fields=(), exclude=()):
         configs = dict()
         default_values = dict()
         serializer_fields = self.__serializer.get_fields()
-        if ignore_recur_fields is True:
-            serializer_fields = {k: v for k, v in serializer_fields.items() if k not in self.__recur_field_list}
         if fields:
             serializer_fields = {k: v for k, v in serializer_fields.items() if k in fields}
         if exclude:
@@ -215,7 +223,7 @@ class ReactHookForm:
             configs[key] = dict()
             configs[key]['type'] = field_type = self.__get_field_type(field)
             configs[key]['name'] = field_name
-            configs[key]['rules'] = self.__get_rules(field, field_type, field_name)
+            configs[key]['validators'] = self.__get_validators(field, field_type, field_name)
             if field_type == 'select':
                 configs[key]['options'] = self.__get_options(key, field)
             default_values[key] = self.__get_default_values(field)
@@ -224,36 +232,70 @@ class ReactHookForm:
             'defaultValues': default_values,
         }
 
+    def __get_validators(self, field, field_type, field_name):
+        """ Update this function to meet frontend matching keys """
+        validators = dict()
+        if not field_type == 'file' and hasattr(field, 'required'):
+            if isinstance(field, ManyRelatedField):
+                validators['required'] = field.allow_empty is False
+                validators['checkValid'] = field.allow_empty is True
+            else:
+                validators['required'] = field.required is True
+                validators['checkValid'] = field.required is False
+
+        if field_type == 'text':
+            if field.min_length:
+                validators['minLength'] = field.min_length
+            if field.max_length:
+                validators['maxLength'] = field.max_length
+
+        elif field_type == 'email':
+            validators['validType'] = 'email'
+
+        elif field_type == 'select':
+            if isinstance(field, ManyRelatedField):
+                validators['type'] = 'multiple'
+
+        elif field_type == 'url':
+            validators['validType'] = 'url'
+
+        elif field_type == 'number':
+            if isinstance(field, IntegerField):
+                validators['validType'] = 'int'
+            elif isinstance(field, FloatField) or isinstance(field, DecimalField):
+                validators['validType'] = 'number'
+
+        elif field_type == 'file':
+            for validator in field.validators:
+                if isinstance(validator, FileExtensionValidator):
+                    validators['fileType'] = validator.allowed_extensions
+                # elif isinstance(validator, FileSizeValidator):
+                #     validators['fileSize'] = validator.max_size
+
+        if validators:
+            validators.update(dict(name=field_name, type=field_type, stopMode=self.__stop_mode))
+            if self.__repeater_name:
+                validators['isRepeater'] = True
+                validators['repeaterName'] = self.__repeater_name
+        return validators
+
     @staticmethod
     def __get_default_values(field):
-        return field.initial if field.initial is not None else ''
+        if hasattr(field, 'default') and not type(field.default) == type:
+            return field.default
+        if field.initial is not None:
+            return field.initial
+        return ''
 
     def __get_field_type(self, field):
         if field.style and 'base_template' in field.style and field.style['base_template'] == 'textarea.html':
             return 'textarea'
         return self.__field_types[field.__class__.__name__]
 
-    @staticmethod
-    def __get_rules(field, field_type, field_name):
-        rules = dict()
-        if field.required is True and not field_type == 'file':
-            rules['required'] = {'value': True, 'message': f"{field_name} is required"}
-        if field_type == 'text':
-            rules['maxLength'] = {'value': field.max_length,
-                                  'message': field.error_messages['max_length'].format(max_length=field.max_length)}
-            if field.min_length:
-                rules['minLength'] = {'value': field.min_length,
-                                      'message': field.error_messages['min_length'].format(min_length=field.min_length)}
-        if field_type == 'number':
-            if field.min_value:
-                rules['min'] = {'value': field.min_value,
-                                'message': field.error_messages['min_value'].format(min_value=field.min_value)}
-            if field.max_value:
-                rules['max'] = {'value': field.max_value,
-                                'message': field.error_messages['max_value'].format(max_value=field.max_value)}
-        return rules
-
     def __get_options(self, key, field):
+        if key in self.__options:
+            return self.__options[key]
+
         queryset, choices = None, None
 
         if hasattr(field, 'queryset'):
@@ -267,11 +309,12 @@ class ReactHookForm:
                 queryset = field.child_relation.queryset.all()
 
         if queryset and queryset.exists():
-            if hasattr(queryset.first(), 'is_del'):
-                queryset = queryset.filter(is_del=False)
             data = []
             for inst in queryset:
-                dic = {'value': encrypt_id(inst.pk), 'label': str(inst)}
+                dic = {
+                    'value': str(inst.pk + 270000981),
+                    'label': self.__label[key](inst) if key in self.__label else str(inst),
+                }
                 if key in self.__select_options_func:
                     dic.update(**self.__select_options_func[key](inst))
                 if type(inst).__name__ == 'Tbl_Country_Code':
@@ -295,6 +338,7 @@ class TechnoSerializerValidation:
         'check_email': '{field} is invalid',
         'check_phone': '{field} is invalid',
         'check_future_datetime': 'Future date(time) is not allowed',
+        'check_file': '{field} is required',
     }
 
     def __init__(self, model, instance):
@@ -312,14 +356,10 @@ class TechnoSerializerValidation:
         self.__country_code.update(**kwargs)
 
     def get_enc_attrs(self):
-        enc_attrs = self.__enc_attrs
-        self.__enc_attrs = dict()
-        return enc_attrs
+        return self.__enc_attrs
 
     def get_custom_errors(self):
-        custom_errors = self.__custom_errors
-        self.__custom_errors = defaultdict(list)
-        return custom_errors
+        return self.__custom_errors
 
     def __get_verbose_name(self, name):
         return self.__model._meta.get_field(name).verbose_name.capitalize()
@@ -349,7 +389,7 @@ class TechnoSerializerValidation:
             value = self.__attrs.get(field, None)
             if value:
                 filter_dic = {f'{field}__iexact' if isinstance(value, str) else field: value}
-                qs = self.__model.objects.filter(is_del=False, **filter_dic)
+                qs = self.__model.objects.filter(**filter_dic)
                 if self.__instance is not None:
                     qs = qs.exclude(pk=self.__instance.pk)
                 if qs.exists():
@@ -361,7 +401,7 @@ class TechnoSerializerValidation:
             value = self.__attrs.get(field, None)
             if value:
                 filter_dic[f'{field}__iexact' if isinstance(value, str) else field] = value
-        qs = self.__model.objects.filter(is_del=False, **filter_dic)
+        qs = self.__model.objects.filter(**filter_dic)
         if self.__instance is not None:
             qs = qs.exclude(pk=self.__instance.pk)
         if qs.exists():
@@ -384,9 +424,9 @@ class TechnoSerializerValidation:
     #     for field in args:
     #         value = self.__attrs.get(field, None)
     #         if value:
-    #             if field in self.country_code:
-    #                 code = self.__attrs.get(self.country_code[field], None)
-    #                 code = code.country_dial_code if code else None
+    #             if field in self.__country_code:
+    #                 code = self.__attrs.get(self.__country_code[field], None)
+    #                 code = code.country_code.replace('+', '') if code and code.country_code else None
     #             else:
     #                 code = '91'
     #             if code and value and check_valid_number(phone_number=value, country_code=code) is False:
@@ -402,6 +442,16 @@ class TechnoSerializerValidation:
         for field in args:
             value = self.__attrs.get(field, None)
             if value and type(value).__name__ == 'date' and value < timezone.now().date():
+                self.__add_error(field)
+
+    def check_file(self, *args):
+        for field in args:
+            value = self.__attrs.get(field, None)
+            if self.__instance:
+                db_value = getattr(self.__instance, field, None)
+                if not db_value and not value:
+                    self.__add_error(field)
+            elif not value:
                 self.__add_error(field)
 
 
@@ -428,15 +478,18 @@ class TechnoModelSerializer(ModelSerializer):
         pass
 
     def save(self, **kwargs):
-        enc_attrs = self.tsv.get_enc_attrs()
-        if enc_attrs:
-            kwargs.update(enc_attrs)
         request = self.context.get('request', None)
         if request and request.user and request.user.is_authenticated:
             if self.instance:
-                kwargs['modify_by'] = request.user
+                if hasattr(self.Meta.model, 'modify_by'):
+                    kwargs['modify_by'] = request.user
             else:
-                kwargs['add_by'] = request.user
+                if hasattr(self.Meta.model, 'add_by'):
+                    kwargs['add_by'] = request.user
+
+        enc_attrs = self.tsv.get_enc_attrs()
+        if enc_attrs:
+            kwargs.update(enc_attrs)
         return super().save(**kwargs)
 
     def to_representation(self, instance):
@@ -458,6 +511,8 @@ class TechnoListSerializer(ModelSerializer):
 
 # noinspection PyUnresolvedReferences
 class TechnoPermissionMixin:
+    model = None
+    modules = ()
     permission_classes = [IsAuthenticated, DjangoModelPermissions]
 
     def get_model_permission(self, model_class=None):
@@ -475,12 +530,9 @@ class TechnoPermissionMixin:
         return perms
 
     def get_extra_modules_permissions(self):
-        app_label = self.model._meta.app_label
-        model_name = self.model._meta.model_name.lower()
         configs = ModuleConfiguration.objects.prefetch_related(
             'permissions', 'permissions__content_type').filter(
-            name__in=self.modules).exclude(
-            permissions__content_type__app_label=app_label, permissions__content_type__model=model_name)
+            codename__in=self.modules)
         check_repeat = []
         perms = defaultdict(dict)
         for config in configs:
@@ -501,8 +553,8 @@ class TechnoPermissionMixin:
 
     def get_custom_permission(self):
         perms = dict()
-        q_object = Q(modules__name__in=self.modules) | Q(is_common_for_all=True)
-        qs = CustomPermission.objects.filter(is_del=False).filter(q_object)
+        q_object = Q(modules__codename__in=self.modules) | Q(perm_scope__in=['Modules', 'Global'])
+        qs = CustomPermission.objects.filter(q_object)
         if qs.exists():
             if self.request.user.is_superuser:
                 perms.update({perm.codename: True for perm in qs})
@@ -517,29 +569,22 @@ class TechnoPermissionMixin:
 # noinspection PyUnresolvedReferences
 class TechnoFetchMixin:
 
-    def has_param(self, key):
-        return self.request.GET.get(key, 'False').lower() == 'true'
+    def fetch(self, *args, **kwargs):
+        response = dict()
+        can_view = self.request.user.has_model_perms(self.model, 'view')
+        can_add = self.request.user.has_model_perms(self.model, 'add')
+        can_change = self.request.user.has_model_perms(self.model, 'change')
+        can_delete = self.request.user.has_model_perms(self.model, 'delete')
+        can_view = can_view or can_change or can_delete
 
-    def has_action(self, key):
-        return self.request.GET.get('action', None) == key
+        get_data = self.has_action('get_data')
+        fetch_record = self.has_action('fetch_record')
 
-    def get_params_response(self, *args, **kwargs):
-        response = dict(title=self.title)
-
-        can_view = has_model_perm(user=self.request.user, model=self.model, perm='view')
-        can_create = has_model_perm(user=self.request.user, model=self.model, perm='change')
-        can_update = has_model_perm(user=self.request.user, model=self.model, perm='add')
-
-        get_crud = self.has_param('get_crud_configs')
-        get_record = self.has_action('fetch_record')
         is_form = self.has_param('is_form')
-        if get_crud:
-            get_perms, get_fields, form_configs, get_data = True, True, True, True
-        else:
-            get_perms = self.has_param('get_perms')
-            get_fields = self.has_param('get_fields')
-            form_configs = self.has_param('get_form_configs')
-            get_data = self.has_action('get_data')
+        get_perms = self.has_param('get_perms')
+        get_fields = self.has_param('get_fields')
+        get_form_configs = self.has_param('get_form_configs')
+        get_title = self.has_param('get_title')
 
         if get_perms:
             response['permissions'] = {
@@ -551,36 +596,29 @@ class TechnoFetchMixin:
                 response['permissions']['__custom'] = custom_perms
 
         if get_fields:
-            if can_view:
-                fields = self.get_list_serializer_class().Meta.fields
-                extra_kwargs = getattr(self.get_list_serializer_class().Meta, 'extra_kwargs', dict())
-                response['fields'] = {
-                    field_name: extra_kwargs[field_name]['label']
-                    if field_name in extra_kwargs and 'label' in extra_kwargs[field_name]
-                    else get_field_verbose_name(self.model, field_name)
-                    for field_name in fields
-                }
-            else:
-                response['fields'] = dict()
+            response['fields'] = {
+                field_name: get_field_verbose_name(self.model, field_name)
+                for field_name in self.get_list_serializer_class().Meta.fields
+            } if can_view else dict()
 
-        if form_configs:
-            response['form_configs'] = self.get_form_configs() if (can_create or can_update) else dict()
+        if get_title:
+            response['title'] = self.title.title()
+
+        if get_form_configs:
+            response['form_configs'] = self.get_form_configs() if (can_add or can_change) else dict()
 
         if get_data:
             response['data'] = self.get_list_serializer(
                 self.get_queryset(), many=True).data if can_view else []
 
-        elif get_record:
+        elif fetch_record:
             if is_form:
                 response['data'] = self.get_serializer(
-                    self.get_object()).data if (can_create or can_update) else dict()
+                    self.get_object()).data if (can_add or can_change) else dict()
             else:
                 response['data'] = self.get_detail_serializer(
                     self.get_object()).data if can_view else dict()
-        return response
 
-    def fetch(self, request, *args, **kwargs):
-        response = self.get_params_response(request, *args, **kwargs)
         return Response(response, status=status.HTTP_200_OK)
 
 
@@ -588,13 +626,12 @@ class TechnoFetchMixin:
 class TechnoCreateMixin:
 
     def create(self, request, *args, **kwargs):
-        s = self.get_serializer(data=self.get_post_data())
+        s = self.get_serializer(data=self.get_payload_data())
         s.is_valid(raise_exception=True)
-        record = s.save()
+        inst = s.save()
         return Response({
-            'data': self.get_list_serializer(record).data if has_model_perm(
-                user=self.request.user, model=self.model, perm='view') else dict(),
-            'message': f"{self.title} Created Successfully",
+            'data': self.get_list_serializer(inst).data if request.user.has_model_perms(self.model, 'view') else dict(),
+            'Success': f"{self.title} Created Successfully",
         }, status=status.HTTP_201_CREATED)
 
 
@@ -602,12 +639,11 @@ class TechnoCreateMixin:
 class TechnoUpdateMixin:
 
     def update(self, request, *args, **kwargs):
-        s = self.get_serializer(data=self.get_post_data(), instance=self.get_object())
+        s = self.get_serializer(data=self.get_payload_data(), instance=self.get_object())
         s.is_valid(raise_exception=True)
         inst = s.save()
         return Response({
-            'data': self.get_list_serializer(inst).data if has_model_perm(
-                user=request.user, model=self.model, perm='view') else dict(),
+            'data': self.get_list_serializer(inst).data if request.user.has_model_perms(self.model, 'view') else dict(),
             'message': f"{self.title} Updated Successfully"
         }, status=status.HTTP_200_OK)
 
@@ -615,14 +651,17 @@ class TechnoUpdateMixin:
 # noinspection PyUnresolvedReferences
 class TechnoDeleteMixin:
 
-    def soft_delete(self, request, *args, **kwargs):
-        record = self.get_object()
-        ids = [encrypt_id(record.pk)]
-        record.delete()
-        return Response({
-            'message': f'{self.title} Deleted Successfully',
-            'ids': ids,
-        }, status=status.HTTP_200_OK)
+    def destroy(self, request, *args, **kwargs):
+        if hasattr(self.model, 'is_del'):
+            return self.soft_delete()
+        else:
+            return self.hard_delete()
+
+    def soft_delete(self):
+        return delete_records(self.request, model_class=self.model, rec_id_kwargs='rec_id')
+
+    def hard_delete(self):
+        return delete_records(self.request, model_class=self.model, rec_id_kwargs='rec_id', is_hard_delete=True)
 
 
 class TechnoGenericBaseAPIView(GenericAPIView):
@@ -644,15 +683,17 @@ class TechnoGenericBaseAPIView(GenericAPIView):
         if self.title is None:
             self.title = self.model._meta.verbose_name.capitalize()
 
-    def get_queryset(self):
-        return self.model.objects.filter(is_del=False)
-
     def get_object_lookup_kwargs(self):
-        payload = self.get_request_data()
-        return dict(pk=decrypt_id(payload['rec_id']))
+        rec_id = self.get_request_data().get('rec_id', None)
+        if not rec_id:
+            raise ClientException('Invalid Payload')
+        return dict(pk=decrypt_id(rec_id))
 
     def get_object(self):
-        return self.get_queryset().get(**self.get_object_lookup_kwargs())
+        try:
+            return self.get_queryset().get(**self.get_object_lookup_kwargs())
+        except:
+            raise ClientException(f'{self.title} not found')
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -685,21 +726,10 @@ class TechnoGenericBaseAPIView(GenericAPIView):
             return self.request.data
         raise Exception('Invalid Method for def get_request_data(self):')
 
-    def get_post_data(self):
-        request_data = self.get_request_data().copy()
-        if 'multipart/form-data' in self.request.content_type:
-            data = json.loads(request_data.get('data'))
-            for k in request_data:
-                f = request_data.get(k)
-                if type(f) == InMemoryUploadedFile:
-                    if f'{k}-clear' in data and data[f'{k}-clear'] is True:
-                        data[k] = None
-                    else:
-                        data[k] = f
-        else:
-            data = request_data
-
-        data = decrypt_post_data(data, serializer_class=self.get_serializer_class())
+    def get_payload_data(self):
+        data = self.get_request_data().copy()
+        data = handle_payload_with_files(data)
+        data = handle_payload_with_encryption(data, serializer_class=self.get_serializer_class())
         return data
 
 
@@ -720,7 +750,7 @@ class TechnoGenericAPIView(TechnoFetchMixin,
         return self.update(request, *args, **kwargs)
 
     def delete(self, request, *args, **kwargs):
-        return self.soft_delete(request, *args, **kwargs)
+        return self.destroy(request, *args, **kwargs)
 
 
 
