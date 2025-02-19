@@ -25,21 +25,22 @@ class DepartmentSerializer(TechnoModelSerializer):
         data = super().to_representation(instance)
         is_form = self.context.get('is_form', False)
         view = self.context.get('view')
+        employees = view.get_employee_serializer(instance.employees.all(), many=True).data
         if is_form:
-            data['employees'] = view.get_employee_serializer(instance.employees.all(), many=True).data
+            data['employees'] = employees
         else:
-            data['employees'] = ', '.join([row.get('name') for row in view.get_employee_serializer(instance.employees.all(), many=True).data])
+            data['employees'] = ', '.join([row.get('name') for row in employees])
         return data
 
     def create(self, validated_data):
         try:
             with transaction.atomic():
-                view = self.context.get('view')
                 record = super().create(validated_data)
 
+                view = self.context.get('view')
                 form_errors = dict()
-                post_data = view.get_post_data()
-                data = post_data.pop('employees', [])
+                payload_data = view.get_payload_data()
+                data = payload_data.pop('employees', [])
                 for i, row in enumerate(data):
                     row['department'] = record.pk
                     s = view.get_employee_serializer(data=row)
@@ -63,11 +64,11 @@ class DepartmentSerializer(TechnoModelSerializer):
 
                 view = self.context.get('view')
                 form_errors = dict()
-                post_data = view.get_post_data()
+                payload_data = view.get_payload_data()
 
                 qs = instance.employees.all()
                 dic = {inst.pk: inst for inst in qs}
-                data = post_data.pop('employees', [])
+                data = payload_data.pop('employees', [])
                 for i, row in enumerate(data):
                     inst = dic.pop(decrypt_id(row.get('rec_id', 0)), None)
                     if inst:
@@ -79,13 +80,15 @@ class DepartmentSerializer(TechnoModelSerializer):
                     else:
                         for field, errors in s.errors.items():
                             form_errors[f"employees.{i}.{field}"] = ', '.join(errors)
-                objs = qs.filter(pk__in=dic.keys())
-                td = DjangoSoftDelete(view.request, qs.model, objs)
-                td.check_delete()
-                if td.protect:
-                    form_errors[f"employees.{i}.{field}"] = td.protect_msg
-                else:
-                    td.delete()
+
+                qs = qs.filter(pk__in=dic.keys())
+                if qs.exists():
+                    td = DjangoSoftDelete(request=view.request, queryset=qs)
+                    td.check_delete()
+                    if td.protect:
+                        form_errors[f"employees.{i}.{field}"] = td.protect_msg
+                    else:
+                        td.delete()
 
                 if form_errors:
                     raise ValidationError(form_errors)
