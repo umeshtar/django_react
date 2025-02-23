@@ -683,6 +683,9 @@ class TechnoGenericBaseAPIView(GenericAPIView):
         if self.title is None:
             self.title = self.model._meta.verbose_name.capitalize()
 
+    def get_queryset(self):
+        return self.model.objects.all()
+
     def get_object_lookup_kwargs(self):
         rec_id = self.get_request_data().get('rec_id', None)
         if not rec_id:
@@ -728,9 +731,16 @@ class TechnoGenericBaseAPIView(GenericAPIView):
 
     def get_payload_data(self):
         data = self.get_request_data().copy()
-        data = handle_payload_with_files(data)
+        if 'multipart/form-data' in self.request.content_type:
+            data = handle_payload_with_files(data)
         data = handle_payload_with_encryption(data, serializer_class=self.get_serializer_class())
         return data
+
+    def has_param(self, key):
+        return self.get_request_data().get(key, 'False').lower() == 'true'
+
+    def has_action(self, key):
+        return self.get_request_data().get('action', None) == key
 
 
 class TechnoGenericAPIView(TechnoFetchMixin,

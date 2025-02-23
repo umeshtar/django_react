@@ -86,8 +86,14 @@ class CustomPermission(RecurField):
     element_type_choices = [
         ('Button', 'Button'),
     ]
+    perm_scope_choices = [
+        ('Modules', 'Modules'),
+        ('Global', 'Global'),
+        ('System', 'System'),
+    ]
     codename = models.CharField(max_length=100)
     element_type = models.CharField(max_length=100, choices=element_type_choices, null=True, blank=True)
+    perm_scope = models.CharField(max_length=20, choices=perm_scope_choices)
     description = models.CharField(max_length=1000)
     is_common_for_all = models.BooleanField(default=False)
 

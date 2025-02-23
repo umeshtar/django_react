@@ -9,13 +9,13 @@ import { deleteRecordThunk, fetchSingleRecordThunk } from '../slices/crud/crudSl
 
 export function FormField({ name, register, configs = {}, errors = {} }) {
     console.log('Render - FormField')
-    const required = configs.rules.required ? true : false
+    const required = configs?.rules?.required ? true : false
 
     let formField;
     if (configs.type === 'select') {
         formField = (
             <>
-                <select {...register(name, configs.rules)} required={required} >
+                <select {...register(name, configs?.rules || {})} required={required} >
                     <option value="" disabled>{`Select ${configs.name}`}</option>
                     {configs.options.map((opt, i) => <option key={i} value={opt.value}>{opt.label}</option>)}
                 </select>
@@ -24,7 +24,7 @@ export function FormField({ name, register, configs = {}, errors = {} }) {
 
     } else {
         formField = (
-            <input {...register(name, configs.rules)} placeholder={`Enter ${configs.name}`} required={required} />
+            <input {...register(name, configs?.rules || {})} placeholder={`Enter ${configs.name}`} required={required} />
         )
     }
     return (

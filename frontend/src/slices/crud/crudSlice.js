@@ -17,7 +17,8 @@ export function baseAsyncThunk({ name, action, func }) {
 }
 
 export function fetchDataThunk({ name, url }) {
-    return baseAsyncThunk({ name, action: 'fetchData', func: (data) => authFetch.get(url, { params: { get_crud_configs: true, ...data } }) })
+    let params = { get_perms: true, action: 'get_data', get_form_configs: true }
+    return baseAsyncThunk({ name, action: 'fetchData', func: (data) => authFetch.get(url, { params: { ...params, ...data } }) })
 }
 
 export function fetchSingleRecordThunk({ name, url }) {
