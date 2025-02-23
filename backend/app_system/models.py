@@ -1,5 +1,6 @@
 import os.path
 
+import uuid
 from django.conf import settings
 from django.contrib.auth.models import Group, Permission, AbstractUser
 from django.db import models
@@ -20,6 +21,7 @@ class AdminManager(models.Manager):
 class RecurField(models.Model):
     objects = RecurManager()
     admin_objects = AdminManager()
+    uuid = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     add_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                related_name="%(app_label)s%(class)s_add")
     modify_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,

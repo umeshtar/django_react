@@ -13,7 +13,7 @@ function DepartmentForm({ name, url, formFields, permissions }) {
     const { __add, __change } = permissions
 
     const { register, control, handleSubmit, reset, setError, formState: { errors } } = useForm({
-        defaultValues: record || formFields.defaultValues
+        defaultValues: formFields.defaultValues
     })
     const employees = useFieldArray({ name: 'employees', control })
 

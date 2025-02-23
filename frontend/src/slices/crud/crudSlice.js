@@ -37,6 +37,23 @@ export function deleteRecordThunk({ name, url }) {
     return baseAsyncThunk({ name, action: 'deleteRecord', func: (data) => authFetch.delete(url, { params: { ...data } }) })
 }
 
+export function handleFormEdit({ name, url, data, reset, setValue, dispatch, successCallBack, errorCallBack }) {
+    let api = fetchSingleRecordThunk({ name, url })
+    dispatch(api({
+        rec_id,
+        successCallBack: (response) => {
+            if (reset) reset()
+            if(setValue){
+                console.log({data});
+            }
+            if (successCallBack) successCallBack(response)
+        },
+        errorCallBack: (err) => {
+            if (errorCallBack) errorCallBack(err)
+        }
+    }))
+}
+
 export function handleFormSubmit({ name, url, data, reset, setError, dispatch, successCallBack, errorCallBack }) {
     let api = data.rec_id ? updateRecordThunk({ name, url }) : createRecordThunk({ name, url })
     dispatch(api({

@@ -39,13 +39,11 @@ export function TableActions({ name, url, rec_id }) {
     console.log('Render - TableActions')
 
     const { __change, __delete } = useSelector((state) => state[name].permissions)
+    const record = useSelector((state) => state[name].record)
     const dispatch = useDispatch()
 
     function handleEdit(rec_id) {
-        let api = fetchSingleRecordThunk({ name, url })
-        dispatch(api({
-            rec_id
-        }))
+        handleFormEdit({ name, url, record, reset, setValue, dispatch, successCallBack, errorCallBack })
     }
 
     function handleDelete(rec_id) {
