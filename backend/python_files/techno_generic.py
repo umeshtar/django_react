@@ -582,7 +582,6 @@ class TechnoFetchMixin:
 
         is_form = self.has_param('is_form')
         get_perms = self.has_param('get_perms')
-        get_fields = self.has_param('get_fields')
         get_form_configs = self.has_param('get_form_configs')
         get_title = self.has_param('get_title')
 
@@ -594,12 +593,6 @@ class TechnoFetchMixin:
             custom_perms = self.get_custom_permission()
             if custom_perms:
                 response['permissions']['__custom'] = custom_perms
-
-        if get_fields:
-            response['fields'] = {
-                field_name: get_field_verbose_name(self.model, field_name)
-                for field_name in self.get_list_serializer_class().Meta.fields
-            } if can_view else dict()
 
         if get_title:
             response['title'] = self.title.title()
@@ -670,7 +663,7 @@ class TechnoGenericBaseAPIView(GenericAPIView):
     list_serializer_class = None
     detail_serializer_class = None
     title = None
-    modules = ('Under Development', )
+    modules = ()
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)

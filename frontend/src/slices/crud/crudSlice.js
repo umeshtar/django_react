@@ -17,12 +17,13 @@ export function baseAsyncThunk({ name, action, func }) {
 }
 
 export function fetchDataThunk({ name, url }) {
-    let params = { get_perms: true, action: 'get_data', get_form_configs: true }
+    let params = { action: 'get_data', get_form_configs: true, get_perms: true }
     return baseAsyncThunk({ name, action: 'fetchData', func: (data) => authFetch.get(url, { params: { ...params, ...data } }) })
 }
 
 export function fetchSingleRecordThunk({ name, url }) {
-    return baseAsyncThunk({ name, action: 'fetchSingleRecord', func: (data) => authFetch.get(url, { params: { action: 'fetch_record', is_form: true, ...data } }) })
+    let params = { action: 'fetch_record', is_form: true }
+    return baseAsyncThunk({ name, action: 'fetchSingleRecord', func: (data) => authFetch.get(url, { params: { ...params, ...data } }) })
 }
 
 export function createRecordThunk({ name, url }) {
@@ -83,7 +84,6 @@ export function createCrudSlice({ name, initialState = {}, reducers = {}, extraR
             title: '',
             data: [],
             record: undefined,
-            tableFields: undefined,
             formFields: undefined,
             permissions: {},
             mode: 'Create',
@@ -101,7 +101,6 @@ export function createCrudSlice({ name, initialState = {}, reducers = {}, extraR
                 .addCase(`${name}/fetchData/fulfilled`, (state, action) => {
                     state.title = action.payload.title
                     state.data = action.payload.data
-                    state.tableFields = action.payload.fields
                     state.formFields = action.payload.form_configs
                     state.permissions = action.payload.permissions
                 })

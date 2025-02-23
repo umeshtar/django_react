@@ -21,7 +21,7 @@ class AdminManager(models.Manager):
 class RecurField(models.Model):
     objects = RecurManager()
     admin_objects = AdminManager()
-    uuid = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    uuid = models.UUIDField(unique=True, default=uuid.uuid4, editable=False)
     add_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                related_name="%(app_label)s%(class)s_add")
     modify_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
@@ -61,6 +61,7 @@ class CustomUser(AbstractUser):
         func = any if key == 'any' else all
         return func([self.has_perm(perm_code.format(perm=perm)) for perm in perms])
 
+
 class SystemConfiguration(RecurField):
     pass
 
@@ -87,17 +88,16 @@ class ModuleConfiguration(RecurField):
 class CustomPermission(RecurField):
     element_type_choices = [
         ('Button', 'Button'),
+        ('Select Box', 'Select Box'),
     ]
     perm_scope_choices = [
         ('Modules', 'Modules'),
         ('Global', 'Global'),
-        ('System', 'System'),
+        ('System Setup', 'System Setup'),
     ]
     codename = models.CharField(max_length=100)
     element_type = models.CharField(max_length=100, choices=element_type_choices, null=True, blank=True)
     perm_scope = models.CharField(max_length=20, choices=perm_scope_choices)
-    description = models.CharField(max_length=1000)
-    is_common_for_all = models.BooleanField(default=False)
 
     users = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True, related_name='custom_permissions')
     groups = models.ManyToManyField(Group, blank=True, related_name='custom_permissions')

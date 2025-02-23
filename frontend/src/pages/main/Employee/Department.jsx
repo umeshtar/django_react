@@ -10,7 +10,7 @@ function DepartmentForm({ name, url, formFields, permissions }) {
 
     const mode = useSelector((state) => state[name].mode)
     const record = useSelector((state) => state[name].record)
-    const { __add, __change } = permissions
+    const { __add = false, __change = false } = permissions || {}
 
     const { register, control, handleSubmit, reset, setError, formState: { errors } } = useForm({
         defaultValues: formFields.defaultValues
@@ -65,7 +65,7 @@ export function Department() {
     const formFields = useSelector((state) => state[name].formFields)
     const permissions = useSelector((state) => state[name].permissions)
     const tableFields = { name: 'Name', employees: 'Employees' }
-    const { __view, __add, __change } = permissions
+    const { __view = false, __add = false, __change = false } = permissions || {}
 
     const dispatch = useDispatch()
 
