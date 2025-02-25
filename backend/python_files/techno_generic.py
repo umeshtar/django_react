@@ -21,60 +21,14 @@ from rest_framework.views import exception_handler
 
 from app_system.models import ModuleConfiguration, CustomPermission
 from backend.settings import Django_Mode
-
-
-def encrypt_id(rec_id):
-    return str(int(rec_id) + 270000981)
-
-
-def decrypt_id(rec_id):
-    return int(rec_id) - 270000981
+from python_files.techno_delete import DjangoSoftDelete
 
 
 def get_field_verbose_name(model, field_name):
     return model._meta.get_field(field_name).verbose_name.capitalize()
 
 
-def get_modules_data(user):
-    def get_recur_modules(modules):
-        lst = []
-        for module in modules:
-            if module.module_type == 'drop-down':
-                children = get_recur_modules(module.children.exclude(pk=module.pk))
-                if children:
-                    lst.append({
-                        'name': module.name,
-                        'type': module.module_type,
-                        'page_url': module.page_url,
-                        'icon': module.react_box_icon.class_name if module.react_box_icon else '',
-                        'children': children,
-                    })
-
-            elif module.module_type == 'navigation':
-                has_perm = any([
-                    user.has_perm(f'{perm.content_type.app_label}.{perm.codename}')
-                    for perm in module.permissions.all()
-                ])
-                if has_perm:
-                    dic = {
-                        'name': module.name,
-                        'type': module.module_type,
-                        'page_url': module.page_url,
-                        'icon': module.react_box_icon.class_name if module.react_box_icon else '',
-                    }
-                    children = get_recur_modules(module.children.exclude(pk=module.pk))
-                    if children:
-                        dic['children'] = children
-                    lst.append(dic)
-        return lst
-
-    main_modules = ModuleConfiguration.objects.filter(
-        is_root_menu=True).prefetch_related('permissions', 'permissions__content_type', 'children')
-    return get_recur_modules(main_modules)
-
-
 def techno_representation(instance, data, is_form, serializer):
-    data['rec_id'] = encrypt_id(instance.pk)
     for k, v in serializer.get_fields().items():
         if isinstance(v, ChoiceField):
             if is_form is False:
@@ -84,48 +38,11 @@ def techno_representation(instance, data, is_form, serializer):
         elif isinstance(v, PrimaryKeyRelatedField):
             inst = getattr(instance, k, None)
             if inst:
-                data[k] = encrypt_id(inst.pk) if is_form else str(inst)
+                data[k] = inst.pk if is_form else str(inst)
         elif isinstance(v, ManyRelatedField):
             qs = getattr(instance, k, None)
             if qs and qs.exists():
-                data[k] = [encrypt_id(inst.pk) if is_form else str(inst) for inst in qs.all()]
-    return data
-
-
-def handle_payload_with_files(data):
-    """
-        It is assumed that when content-type is multipart/form-data
-        data other than files are sent as json dumps data with key 'data'
-        and all files are sent by flatten key
-     """
-    payload = json.loads(data.get('data'))
-    for k, v in data.items():
-        if type(v) == InMemoryUploadedFile:
-            payload[k] = v
-    # Need to test clear functionality
-    # for k in data:
-    #     if f'{k}-clear' in data and data[f'{k}-clear'] is True:
-    #         data[k] = None
-    return payload
-
-
-def handle_payload_with_encryption(data, serializer_class=None, foreign_keys=(), m2m_relations=()):
-    fks, m2m = [], []
-    fks.extend(foreign_keys)
-    m2m.extend(m2m_relations)
-    if serializer_class is not None:
-        fields = serializer_class().get_fields().items()
-        fks.extend([k for k, v in fields if isinstance(v, PrimaryKeyRelatedField)])
-        m2m.extend([k for k, v in fields if isinstance(v, ManyRelatedField)])
-
-    for k in fks:
-        if k in data and data[k]:
-            data[k] = decrypt_id(data[k])
-
-    for k in m2m:
-        if k in data and data[k] and isinstance(data[k], list):
-            data[k] = [decrypt_id(row) for row in data[k]]
-
+                data[k] = [inst.pk if is_form else str(inst) for inst in qs.all()]
     return data
 
 
@@ -162,6 +79,11 @@ class ClientException(Exception):
 
 
 class ReactHookForm:
+    """
+        Doc String is Pending
+        Manually Specify verbose name for repeaters
+        Frontend validator function key mapping is pending
+    """
     __stop_mode = False
     __field_types = {
         'CharField': 'text',
@@ -312,13 +234,13 @@ class ReactHookForm:
             data = []
             for inst in queryset:
                 dic = {
-                    'value': str(inst.pk + 270000981),
+                    'value': inst.pk,
                     'label': self.__label[key](inst) if key in self.__label else str(inst),
                 }
                 if key in self.__select_options_func:
                     dic.update(**self.__select_options_func[key](inst))
-                if type(inst).__name__ == 'Tbl_Country_Code':
-                    dic['code'] = inst.country_code.replace('+', '')
+                if type(inst).__name__ == 'Tbl_Country_Code' and hasattr(inst, 'country_code'):
+                    dic['code'] = inst.country_code
                 data.append(dic)
             return data
 
@@ -511,9 +433,7 @@ class TechnoListSerializer(ModelSerializer):
 
 # noinspection PyUnresolvedReferences
 class TechnoPermissionMixin:
-    model = None
-    modules = ()
-    permission_classes = [IsAuthenticated, DjangoModelPermissions]
+    """ Verify before Implementation """
 
     def get_model_permission(self, model_class=None):
         perms = dict()
@@ -624,7 +544,7 @@ class TechnoCreateMixin:
         inst = s.save()
         return Response({
             'data': self.get_list_serializer(inst).data if request.user.has_model_perms(self.model, 'view') else dict(),
-            'Success': f"{self.title} Created Successfully",
+            'message': f"{self.title} Created Successfully",
         }, status=status.HTTP_201_CREATED)
 
 
@@ -643,18 +563,38 @@ class TechnoUpdateMixin:
 
 # noinspection PyUnresolvedReferences
 class TechnoDeleteMixin:
+    """
+        Implement Soft delete for models having is_del attribute and Hard Delete Otherwise
+    """
 
     def destroy(self, request, *args, **kwargs):
-        if hasattr(self.model, 'is_del'):
-            return self.soft_delete()
+        data = self.get_request_data()
+        ids = data.get('ids', [])
+        queryset = self.model.objects.filter(pk__in=ids)
+        delete_confirmation = data.get('delete_confirmation', 'False').lower() == 'true'
+        td = DjangoSoftDelete(request=self.request, queryset=queryset)
+        if delete_confirmation is True:
+            if hasattr(queryset.model, 'is_del'):
+                td.delete()
+            else:
+                for obj in objs:
+                    obj.delete()
+            return Response({
+                'ids': ids,
+                'delete_confirmation': delete_confirmation,
+                'message': f'{td.model_name.capitalize()} Deleted Successfully'
+            }, status=status.HTTP_200_OK)
         else:
-            return self.hard_delete()
-
-    def soft_delete(self):
-        return delete_records(self.request, model_class=self.model, rec_id_kwargs='rec_id')
-
-    def hard_delete(self):
-        return delete_records(self.request, model_class=self.model, rec_id_kwargs='rec_id', is_hard_delete=True)
+            td.check_delete()
+            return Response({
+                'delete_confirmation': delete_confirmation,
+                'delete_context': {
+                    'model_name': td.model_name,
+                    'msg_type': 'protect' if td.protect else 'cascade',
+                    'summary': td.summary,
+                    'msg': td.protect or td.result,
+                }
+            }, status=status.HTTP_200_OK)
 
 
 class TechnoGenericBaseAPIView(GenericAPIView):
@@ -679,15 +619,9 @@ class TechnoGenericBaseAPIView(GenericAPIView):
     def get_queryset(self):
         return self.model.objects.all()
 
-    def get_object_lookup_kwargs(self):
-        rec_id = self.get_request_data().get('rec_id', None)
-        if not rec_id:
-            raise ClientException('Invalid Payload')
-        return dict(pk=decrypt_id(rec_id))
-
     def get_object(self):
         try:
-            return self.get_queryset().get(**self.get_object_lookup_kwargs())
+            return super().get_object()
         except:
             raise ClientException(f'{self.title} not found')
 
@@ -720,13 +654,19 @@ class TechnoGenericBaseAPIView(GenericAPIView):
             return self.request.GET
         if self.request.method in ['PUT', 'POST']:
             return self.request.data
-        raise Exception('Invalid Method for def get_request_data(self):')
+        raise Exception('Invalid Request')
 
     def get_payload_data(self):
         data = self.get_request_data().copy()
         if 'multipart/form-data' in self.request.content_type:
-            data = handle_payload_with_files(data)
-        data = handle_payload_with_encryption(data, serializer_class=self.get_serializer_class())
+            payload = json.loads(data.get('data'))
+            for k, v in data.items():
+                if type(v) == InMemoryUploadedFile:
+                    payload[k] = v
+            # Need to test clear functionality
+            # for k in data:
+            #     if f'{k}-clear' in data and data[f'{k}-clear'] is True:
+            #         data[k] = None
         return data
 
     def has_param(self, key):
@@ -754,6 +694,3 @@ class TechnoGenericAPIView(TechnoFetchMixin,
 
     def delete(self, request, *args, **kwargs):
         return self.destroy(request, *args, **kwargs)
-
-
-

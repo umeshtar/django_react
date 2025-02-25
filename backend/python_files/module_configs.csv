@@ -1,4 +1,0 @@
-﻿name,codename,menu_type,is_root_menu,page_url,react_box_icon,perms,models,children
-Dashboard,dashboard,navigation,TRUE,localhost:5173/,Dashboard,add_city,,employee
-Employee,employee,route,FALSE,localhost:5173/employee/,User,view_city,company,department
-Department,department,route,FALSE,localhost:5173/employee/department,Department,,department,

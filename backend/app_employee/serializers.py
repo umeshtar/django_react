@@ -3,7 +3,7 @@ from rest_framework.exceptions import ValidationError
 
 from app_employee.models import *
 from python_files.techno_delete import DjangoSoftDelete
-from python_files.techno_generic import TechnoModelSerializer, decrypt_id
+from python_files.techno_generic import TechnoModelSerializer
 
 
 class EmployeeSerializer(TechnoModelSerializer):
@@ -70,7 +70,7 @@ class DepartmentSerializer(TechnoModelSerializer):
                 dic = {inst.pk: inst for inst in qs}
                 data = payload_data.pop('employees', [])
                 for i, row in enumerate(data):
-                    inst = dic.pop(decrypt_id(row.get('rec_id', 0)), None)
+                    inst = dic.pop(row.get('rec_id', 0), None)
                     if inst:
                         s = view.get_employee_serializer(data=row, instance=inst, partial=True)
                     else:
