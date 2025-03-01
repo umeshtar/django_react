@@ -4,7 +4,7 @@ import { Login } from "../pages/login/Login";
 import Cookies from "js-cookie";
 import { PageNotFound } from "../components/PageNotFound";
 import { employeeRoutes } from "./main/emp.routes";
-import { Dashboard } from "../pages/Dashboard/Dashboard";
+import { Dashboard } from "../pages/dashboard/Dashboard";
 
 const authUser = Cookies.get("authUser")
 

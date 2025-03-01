@@ -1,5 +1,5 @@
 from django.contrib import admin
-from django.contrib.auth.models import Permission
+from django.contrib.auth.models import Permission, User
 from django.contrib.contenttypes.models import ContentType
 
 from app_system.models import *
@@ -26,7 +26,8 @@ admin.site.register(SystemConfiguration, RecurAdmin)
 admin.site.register(CustomPermission, RecurAdmin)
 admin.site.register(Permission)
 admin.site.register(ContentType)
-admin.site.register(Attachment, RecurAdmin)
+admin.site.register(CustomUser, admin.ModelAdmin)
+admin.site.register(UserDefinedContentType, admin.ModelAdmin)
 
 
 @admin.register(ModuleConfiguration)
@@ -34,14 +35,3 @@ class ModuleConfigurationAdmin(RecurAdmin):
     list_display = ('name', 'is_root_menu', 'menu_type')
     list_editable = ('is_root_menu',)
     filter_horizontal = ('permissions',)
-
-
-
-
-
-
-
-
-
-
-

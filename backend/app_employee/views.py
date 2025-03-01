@@ -7,7 +7,7 @@ class DepartmentView(TechnoGenericAPIView):
     model = Department
     serializer_class = DepartmentSerializer
     employee_serializer_class = EmployeeSerializer
-    modules = ['Department']
+    modules = ['department']
 
     def get_employee_serializer(self, *args, **kwargs):
         kwargs.setdefault('context', self.get_serializer_context())
@@ -21,6 +21,10 @@ class DepartmentView(TechnoGenericAPIView):
         return form_configs
 
 
+class EmployeeView(TechnoGenericAPIView):
+    model = Employee
+    serializer_class = EmployeeSerializer
+    modules = ['employee']
 
 
 

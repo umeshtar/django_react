@@ -1,22 +1,22 @@
 import { useDispatch, useSelector } from "react-redux";
 import { fetchSingleRecordThunk, handleFormSubmit } from "../../../slices/crud/crudSlice";
 import { BaseComponent, FormField, TableComponent, TitleComponent } from "../../../components/CrudComponent";
-import { resetForm } from "../../../slices/main/employee/departmentSlice";
-import { useFieldArray, useForm } from "react-hook-form";
+import { useForm } from "react-hook-form";
+import { resetForm } from "../../../slices/main/employee/employeeSlice";
 import { Navigation } from "../../dashboard/Navigation";
 
-export function Department() {
-    const name = 'department'
-    const url = 'employee/department/'
+export function Employee() {
+    const name = 'employee'
+    const url = 'employee/'
     return (
         <BaseComponent {...{ name, url }}>
-            <DepartmentHelper {...{ name, url }} />
+            <EmployeeHelper {...{ name, url }} />
         </BaseComponent>
     )
 }
 
-function DepartmentHelper({ name, url }) {
-    const tableFields = { name: 'Name', employees: 'Employees' }
+function EmployeeHelper({ name, url }) {
+    const tableFields = { name: 'Name', department: 'Department' }
 
     const dispatch = useDispatch()
 
@@ -24,11 +24,10 @@ function DepartmentHelper({ name, url }) {
     const formFields = useSelector((state) => state[name].formFields)
     const permissions = useSelector((state) => state[name].permissions)
     const mode = useSelector((state) => state[name].mode)
-
-    const { register, control, handleSubmit, reset, setValue, setError, formState: { errors } } = useForm({
+    
+    const { register, handleSubmit, reset, setValue, setError, formState: { errors } } = useForm({
         defaultValues: formFields.defaultValues
     })
-    const employees = useFieldArray({ name: 'employees', control })
 
     const { __view = false, __add = false, __change = false } = permissions || {}
     const showForm = formFields && (__add || __change) ? true : false
@@ -45,9 +44,7 @@ function DepartmentHelper({ name, url }) {
             rec_id,
             successCallBack: (response) => {
                 reset()
-                const { employees: employeeData, ...formData } = response.data.data
-                Object.entries(formData).forEach(([k, v])=> setValue(k, v))
-                employees.replace(employeeData)
+                Object.entries(response.data.data).forEach(([k, v]) => setValue(k, v))
             },
         }))
     }
@@ -68,25 +65,8 @@ function DepartmentHelper({ name, url }) {
                             <div style={{ marginBottom: '20px' }}>
                                 <FormField {...{ register, name: 'name', configs: formFields.fields.name, errors }} />
                             </div>
-                            <div style={{ display: 'flex', marginBottom: '20px' }}>
-                                <div>
-                                    {employees.fields.map((field, index) => {
-                                        return (
-                                            <div key={field.id} style={{ marginBottom: '20px' }}>
-                                                <div>
-                                                    <FormField {...{
-                                                        register, name: `employees.${index}.name`, errors,
-                                                        configs: formFields.repeaters.employees.fields.name,
-                                                    }} />
-                                                    <button type="button" onClick={() => employees.remove(index)}>Delete</button>
-                                                </div>
-                                            </div>
-                                        )
-                                    })}
-                                </div>
-                                <div>
-                                    <button type="button" onClick={() => employees.append(formFields.repeaters.employees.defaultValues)}>Add</button>
-                                </div>
+                            <div style={{ marginBottom: '20px' }}>
+                                <FormField {...{ register, name: 'department', configs: formFields.fields.department, errors }} />
                             </div>
                             <button>{mode === 'Create' ? 'Submit' : 'Update'}</button>
                             <button type='button' onClick={handleReset} style={{ marginLeft: 10 }}>Cancel</button>

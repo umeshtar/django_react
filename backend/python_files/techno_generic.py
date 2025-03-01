@@ -10,10 +10,10 @@ from django.core.validators import FileExtensionValidator
 from django.db.models import Q, ProtectedError
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import ValidationError, MethodNotAllowed
 from rest_framework.fields import ChoiceField, IntegerField, FloatField, DecimalField
 from rest_framework.generics import GenericAPIView
-from rest_framework.permissions import IsAuthenticated, DjangoModelPermissions
+from rest_framework.permissions import IsAuthenticated, DjangoModelPermissions, BasePermission
 from rest_framework.relations import PrimaryKeyRelatedField, ManyRelatedField
 from rest_framework.response import Response
 from rest_framework.serializers import ModelSerializer
@@ -30,6 +30,7 @@ def get_field_verbose_name(model, field_name):
 
 def techno_representation(instance, data, is_form, serializer):
     for k, v in serializer.get_fields().items():
+        data['rec_id'] = instance.id
         if isinstance(v, ChoiceField):
             if is_form is False:
                 value = getattr(instance, k, None)
@@ -76,6 +77,38 @@ def custom_exception_handler(exc, context):
 
 class ClientException(Exception):
     pass
+
+
+class TechnoModelPermission(BasePermission):
+    model = None
+    perms_map = {
+        'GET': [],
+        'OPTIONS': [],
+        'HEAD': [],
+        'POST': ['add'],
+        'PUT': ['change'],
+        'PATCH': ['change'],
+        'DELETE': ['delete'],
+    }
+
+    def get_required_permissions(self, method):
+        if not self.model:
+            raise ImproperlyConfigured('Attribute model can not be blank')
+
+        if method not in self.perms_map:
+            raise MethodNotAllowed(method)
+
+        app_label = self.model._meta.app_label
+        model_name = self.model._meta.model_name
+        perm_code = f"{app_label}.{{perm}}_{model_name}"
+        return [perm_code.format(perm=perm) for perm in self.perms_map[method]]
+
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+
+        perms = self.get_required_permissions(request.method)
+        return request.user.has_perms(perms)
 
 
 class ReactHookForm:
@@ -145,7 +178,7 @@ class ReactHookForm:
             configs[key] = dict()
             configs[key]['type'] = field_type = self.__get_field_type(field)
             configs[key]['name'] = field_name
-            configs[key]['validators'] = self.__get_validators(field, field_type, field_name)
+            # configs[key]['validators'] = self.__get_validators(field, field_type, field_name)
             if field_type == 'select':
                 configs[key]['options'] = self.__get_options(key, field)
             default_values[key] = self.__get_default_values(field)
@@ -522,7 +555,7 @@ class TechnoFetchMixin:
 
         if get_data:
             response['data'] = self.get_list_serializer(
-                self.get_queryset(), many=True).data if can_view else []
+                self.filter_queryset(self.get_queryset()), many=True).data if can_view else []
 
         elif fetch_record:
             if is_form:
@@ -569,16 +602,18 @@ class TechnoDeleteMixin:
 
     def destroy(self, request, *args, **kwargs):
         data = self.get_request_data()
-        ids = data.get('ids', [])
-        queryset = self.model.objects.filter(pk__in=ids)
-        delete_confirmation = data.get('delete_confirmation', 'False').lower() == 'true'
+        ids = data.getlist('ids[]', [])
+        queryset = self.filter_queryset(self.get_queryset()).filter(pk__in=ids)
+        if not queryset.exists():
+            raise ClientException(f'{self.title} not found')
+
+        delete_confirmation = self.has_param('delete_confirmation')
         td = DjangoSoftDelete(request=self.request, queryset=queryset)
         if delete_confirmation is True:
             if hasattr(queryset.model, 'is_del'):
                 td.delete()
             else:
-                for obj in objs:
-                    obj.delete()
+                td.queryset.delete()
             return Response({
                 'ids': ids,
                 'delete_confirmation': delete_confirmation,
@@ -591,8 +626,9 @@ class TechnoDeleteMixin:
                 'delete_context': {
                     'model_name': td.model_name,
                     'msg_type': 'protect' if td.protect else 'cascade',
+                    'protect_msg': td.protect_msg if td.protect else '',
                     'summary': td.summary,
-                    'msg': td.protect or td.result,
+                    'message': td.protect or td.cascade,
                 }
             }, status=status.HTTP_200_OK)
 
@@ -621,7 +657,10 @@ class TechnoGenericBaseAPIView(GenericAPIView):
 
     def get_object(self):
         try:
-            return super().get_object()
+            queryset = self.filter_queryset(self.get_queryset())
+            obj = queryset.get(pk=self.get_request_data().get('rec_id'))
+            self.check_object_permissions(self.request, obj)
+            return obj
         except:
             raise ClientException(f'{self.title} not found')
 

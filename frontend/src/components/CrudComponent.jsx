@@ -1,10 +1,10 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import '../styles/style.css'
 import { useDispatch, useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
 import { handleLogout } from '../pages/login/Login';
 import { ErrorMessage } from '@hookform/error-message';
-import { deleteRecordThunk, fetchSingleRecordThunk } from '../slices/crud/crudSlice';
+import { deleteRecordThunk, fetchDataThunk } from '../slices/crud/crudSlice';
 
 
 export function FormField({ name, register, configs = {}, errors = {} }) {
@@ -35,37 +35,35 @@ export function FormField({ name, register, configs = {}, errors = {} }) {
     )
 }
 
-export function TableActions({ name, url, rec_id }) {
-    console.log('Render - TableActions')
+export function TableComponent({ name, url, tableFields, permissions, handleEdit }) {
+    console.log('Render - TableComponent');
 
-    const { __change, __delete } = useSelector((state) => state[name].permissions)
-    const record = useSelector((state) => state[name].record)
     const dispatch = useDispatch()
+    const data = useSelector((state) => state[name].data)
 
-    function handleEdit(rec_id) {
-        handleFormEdit({ name, url, record, reset, setValue, dispatch, successCallBack, errorCallBack })
-    }
+    const { __change, __delete } = permissions
+    const showActions = __change || __delete
 
     function handleDelete(rec_id) {
-        const isDelete = confirm('Are you Sure?')
-        if (isDelete) {
-            let api = deleteRecordThunk({ name, url })
-            dispatch(api({ rec_id }))
-        }
+        let api = deleteRecordThunk({ name, url })
+        dispatch(api({
+            ids: [rec_id],
+            delete_confirmation: false,
+            successCallBack: (data) => {
+                const msg_type = data?.data?.delete_context?.msg_type
+                if (msg_type === 'protect') {
+                    alert(data.data.delete_context.protect_msg)
+                } else if (msg_type === 'cascade') {
+                    if (confirm('Are you sure?')) {
+                        dispatch(api({
+                            ids: [rec_id],
+                            delete_confirmation: true,
+                        }))
+                    }
+                }
+            }
+        }))
     }
-
-    return <>
-        {__change && <td><button onClick={() => handleEdit(rec_id)}>edit</button></td>}
-        {__delete && <td><button onClick={() => handleDelete(rec_id)}>delete</button></td>}
-    </>
-}
-
-export function TableComponent({ name, url, tableFields, permissions }) {
-    console.log('Render - TableComponent');
-    const data = useSelector((state) => state[name].data)
-    const { __change, __delete } = permissions
-
-    const showActions = __change || __delete
 
     return (
         <table>
@@ -80,7 +78,12 @@ export function TableComponent({ name, url, tableFields, permissions }) {
                     return (
                         <tr key={rowIndex}>
                             {Object.keys(tableFields).map((key, dataIndex) => <td key={dataIndex}>{obj[key]}</td>)}
-                            {showActions && <TableActions {...{ name, url, rec_id: obj.rec_id }} />}
+                            {showActions && (
+                                <>
+                                    {__change && <td><button onClick={() => handleEdit(obj.rec_id)}>edit</button></td>}
+                                    {__delete && <td><button onClick={() => handleDelete(obj.rec_id)}>delete</button></td>}
+                                </>
+                            )}
                         </tr>
                     )
                 })}
@@ -92,19 +95,33 @@ export function TableComponent({ name, url, tableFields, permissions }) {
 export function TitleComponent({ title }) {
     console.log('Render - TitleComponent');
     return (
-        <h4>{title}</h4>
+        <header className="header">
+            <h1>{title}</h1>
+            <button className="logout-button" onClick={handleLogout}>Logout</button>
+        </header>
     )
 }
 
-export function Navigation() {
-    return <>
-        <div>
-            <Link to="/dashboard">Dashboard</Link>
-        </div>
-        <div>
-            <button onClick={handleLogout}>Log out</button>
-        </div>
-    </>
+
+export function BaseComponent({ name, url, children }) {
+    console.log("Render - BaseComponent");
+
+    const [init, setInit] = useState(false)
+
+    const dispatch = useDispatch()
+    useEffect(() => {
+        let fetchApi = fetchDataThunk({ name, url })
+        dispatch(fetchApi({
+            successCallBack: () => {
+                setInit(true)
+            }
+        }))
+    }, [])
+
+    return (
+        init === true ? children : "Loading..."
+    )
 }
+
 
 

@@ -13,7 +13,7 @@ const loaderSlice = createSlice({
     extraReducers: (builder) => {
         builder
             .addMatcher(isPending, (state, action) => {
-                console.log({ leaderPending: action });
+                console.log({ loaderPending: action });
                 const actionType = action.type.split('/pending')[0]
                 state.activeRequests.push(actionType)
             })

@@ -17,7 +17,7 @@ export function baseAsyncThunk({ name, action, func }) {
 }
 
 export function fetchDataThunk({ name, url }) {
-    let params = { action: 'get_data', get_form_configs: true, get_perms: true }
+    let params = { action: 'get_data', get_form_configs: true, get_perms: true, get_title: true }
     return baseAsyncThunk({ name, action: 'fetchData', func: (data) => authFetch.get(url, { params: { ...params, ...data } }) })
 }
 
@@ -36,23 +36,6 @@ export function updateRecordThunk({ name, url }) {
 
 export function deleteRecordThunk({ name, url }) {
     return baseAsyncThunk({ name, action: 'deleteRecord', func: (data) => authFetch.delete(url, { params: { ...data } }) })
-}
-
-export function handleFormEdit({ name, url, data, reset, setValue, dispatch, successCallBack, errorCallBack }) {
-    let api = fetchSingleRecordThunk({ name, url })
-    dispatch(api({
-        rec_id,
-        successCallBack: (response) => {
-            if (reset) reset()
-            if(setValue){
-                console.log({data});
-            }
-            if (successCallBack) successCallBack(response)
-        },
-        errorCallBack: (err) => {
-            if (errorCallBack) errorCallBack(err)
-        }
-    }))
 }
 
 export function handleFormSubmit({ name, url, data, reset, setError, dispatch, successCallBack, errorCallBack }) {
@@ -118,7 +101,9 @@ export function createCrudSlice({ name, initialState = {}, reducers = {}, extraR
                     state.record = undefined
                 })
                 .addCase(`${name}/deleteRecord/fulfilled`, (state, action) => {
-                    state.data = state.data.filter(obj => !action.payload.ids.includes(obj.rec_id))
+                    if(action.payload.delete_confirmation === true){
+                        state.data = state.data.filter(obj => !action.payload.ids.includes(obj.rec_id))
+                    }
                 })
             extraReducerCases.forEach((obj) => {
                 builder.addCase(obj.case, obj.reducer)

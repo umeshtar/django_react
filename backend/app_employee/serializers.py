@@ -67,9 +67,10 @@ class DepartmentSerializer(TechnoModelSerializer):
                 payload_data = view.get_payload_data()
 
                 qs = instance.employees.all()
-                dic = {inst.pk: inst for inst in qs}
+                dic = {str(inst.pk): inst for inst in qs}
                 data = payload_data.pop('employees', [])
                 for i, row in enumerate(data):
+                    row['department'] = record.pk
                     inst = dic.pop(row.get('rec_id', 0), None)
                     if inst:
                         s = view.get_employee_serializer(data=row, instance=inst, partial=True)
@@ -81,9 +82,8 @@ class DepartmentSerializer(TechnoModelSerializer):
                         for field, errors in s.errors.items():
                             form_errors[f"employees.{i}.{field}"] = ', '.join(errors)
 
-                qs = qs.filter(pk__in=dic.keys())
-                if qs.exists():
-                    td = DjangoSoftDelete(request=view.request, queryset=qs)
+                if dic:
+                    td = DjangoSoftDelete(request=view.request, queryset=qs.filter(pk__in=dic.keys()))
                     td.check_delete()
                     if td.protect:
                         form_errors[f"employees.{i}.{field}"] = td.protect_msg
