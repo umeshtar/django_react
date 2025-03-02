@@ -517,8 +517,9 @@ class TechnoSelectSerializer(ModelSerializer):
         fields = []
 
     def to_representation(self, instance):
+        is_form = True
         data = super().to_representation(instance)
-        data = techno_representation(instance, data, is_form=True, serializer=self)
+        data = techno_representation(instance, data, is_form, serializer=self)
         data['value'] = data.pop('rec_id')
         data['label'] = str(instance)
         return data
