@@ -29,7 +29,7 @@ def get_field_verbose_name(model, field_name):
 
 
 def techno_representation(instance, data, is_form, serializer):
-    data["rec_id"] = instance.id
+    data["rec_id"] = instance.pk
     for k, v in serializer.get_fields().items():
         if isinstance(v, ChoiceField):
             if is_form is False:
