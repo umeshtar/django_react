@@ -1,5 +1,2 @@
 class DataTable:
-    """ Future Plan """
-
-
-
+    """Future Plan"""

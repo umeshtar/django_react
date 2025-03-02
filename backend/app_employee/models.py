@@ -9,11 +9,13 @@ class Department(RecurField):
 
 
 class Employee(RecurField):
-    department = models.ForeignKey(Department, on_delete=models.PROTECT, related_name='employees')
+    department = models.ForeignKey(
+        Department, on_delete=models.PROTECT, related_name="employees"
+    )
 
 
-
-
+class EmployeeBank(RecurField):
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
 
 
 

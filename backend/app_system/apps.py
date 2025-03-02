@@ -2,5 +2,5 @@ from django.apps import AppConfig
 
 
 class AppSystemConfig(AppConfig):
-    default_auto_field = 'django.db.models.BigAutoField'
-    name = 'app_system'
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "app_system"

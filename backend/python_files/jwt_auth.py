@@ -1,5 +1,3 @@
-import requests
-
 """
 settings.py
 REST_FRAMEWORK = {
@@ -13,7 +11,7 @@ path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
 path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 """
 
-url = 'http://127.0.0.1:8000/token/'
+url = "http://127.0.0.1:8000/token/"
 headers = {"Content-Type": "application/json"}
 # data = {'username': 'umesh', 'password': 'admin'}
 # response = requests.post(url=url, headers=headers, json=data)
@@ -34,5 +32,3 @@ headers = {"Content-Type": "application/json"}
 # response = requests.post(url=url, headers=headers, json=data)
 # print(response.status_code)
 # print(response.content)
-
-

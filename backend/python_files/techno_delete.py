@@ -1,10 +1,21 @@
-from django.db.models import ManyToOneRel, OneToOneRel, CASCADE, PROTECT, ManyToManyField, ManyToManyRel
+from django.db.models import (
+    CASCADE,
+    PROTECT,
+    ManyToManyField,
+    ManyToManyRel,
+    ManyToOneRel,
+    OneToOneRel,
+)
 
 
 class DjangoSoftDelete:
 
     def __init__(self, request, queryset):
-        self.request_user = request.user if request and request.user and request.user.is_authenticated else None
+        self.request_user = (
+            request.user
+            if request and request.user and request.user.is_authenticated
+            else None
+        )
         self.model_name = self.get_model_name(queryset.model)
         self.queryset = queryset
 
@@ -27,9 +38,9 @@ class DjangoSoftDelete:
     @property
     def protect_msg(self):
         if self.protect:
-            msg = ', '.join([f"{k}: {', '.join(v)}" for k, v in self.protect.items()])
-            return f'Can not delete {self.model_name} due to following protected records: {msg}'
-        return ''
+            msg = ", ".join([f"{k}: {', '.join(v)}" for k, v in self.protect.items()])
+            return f"Can not delete {self.model_name} due to following protected records: {msg}"
+        return ""
 
     def check_delete(self):
         self.protect_recur = []
@@ -38,7 +49,7 @@ class DjangoSoftDelete:
         if not self.protect:
             self.cascade_recur = []
             self.cascade = self.__get_cascaded(self.model_name, self.queryset)
-            self.__get_cascaded_msg('', self.cascade, 0)
+            self.__get_cascaded_msg("", self.cascade, 0)
 
     def delete(self):
         self.protect_recur = []
@@ -58,7 +69,9 @@ class DjangoSoftDelete:
                 for row in self.get_fields(obj):
                     if isinstance(row, ManyToOneRel) or isinstance(row, OneToOneRel):
                         if row.on_delete == CASCADE:
-                            related_queryset = row.related_model.objects.filter(**{f'{row.field.name}': obj})
+                            related_queryset = row.related_model.objects.filter(
+                                **{f"{row.field.name}": obj}
+                            )
                             self.__delete(related_queryset)
 
     def __get_protected(self, queryset):
@@ -69,13 +82,23 @@ class DjangoSoftDelete:
                     if isinstance(row, ManyToOneRel) or isinstance(row, OneToOneRel):
                         if row.on_delete == PROTECT:
                             related_model_name = self.get_model_name(row.related_model)
-                            for inst in row.related_model.objects.filter(**{f'{row.field.name}': obj}):
+                            for inst in row.related_model.objects.filter(
+                                **{f"{row.field.name}": obj}
+                            ):
                                 if related_model_name not in self.protect:
-                                    self.protect[related_model_name] = [self.get_inst_name(inst)]
+                                    self.protect[related_model_name] = [
+                                        self.get_inst_name(inst)
+                                    ]
                                 elif inst not in self.protect[related_model_name]:
-                                    self.protect[related_model_name].append(self.get_inst_name(inst))
+                                    self.protect[related_model_name].append(
+                                        self.get_inst_name(inst)
+                                    )
                         elif row.on_delete == CASCADE:
-                            self.__get_protected(row.related_model.objects.filter(**{f'{row.field.name}': obj}))
+                            self.__get_protected(
+                                row.related_model.objects.filter(
+                                    **{f"{row.field.name}": obj}
+                                )
+                            )
 
     def __get_protected_msg(self):
         for model_name, objs in self.protect.items():
@@ -96,49 +119,59 @@ class DjangoSoftDelete:
                     if isinstance(row, ManyToOneRel) or isinstance(row, OneToOneRel):
                         if row.on_delete == CASCADE:
                             related_model_name = self.get_model_name(row.related_model)
-                            related_queryset = row.related_model.objects.filter(**{f'{row.field.name}': obj})
-                            lst2.extend(self.__get_cascaded(related_model_name, related_queryset))
+                            related_queryset = row.related_model.objects.filter(
+                                **{f"{row.field.name}": obj}
+                            )
+                            lst2.extend(
+                                self.__get_cascaded(
+                                    related_model_name, related_queryset
+                                )
+                            )
                     elif isinstance(row, ManyToManyField):
                         related_model_name = self.get_model_name(row.related_model)
                         related_queryset = getattr(obj, row.name).all()
                         for inst in related_queryset:
-                            lst2.append({
-                                'model': related_model_name,
-                                'name': self.get_inst_name(inst),
-                                'relationship': True
-                            })
+                            lst2.append(
+                                {
+                                    "model": related_model_name,
+                                    "name": self.get_inst_name(inst),
+                                    "relationship": True,
+                                }
+                            )
                     elif isinstance(row, ManyToManyRel):
                         related_model_name = self.get_model_name(row.related_model)
-                        related_queryset = row.related_model.objects.filter(**{f'{row.field.name}': obj})
+                        related_queryset = row.related_model.objects.filter(
+                            **{f"{row.field.name}": obj}
+                        )
                         for inst in related_queryset:
-                            lst2.append({
-                                'model': related_model_name,
-                                'name': self.get_inst_name(inst),
-                                'relationship': True
-                            })
-                lst.append({
-                    'model': model_name,
-                    'name': self.get_inst_name(obj),
-                    'children': lst2
-                })
+                            lst2.append(
+                                {
+                                    "model": related_model_name,
+                                    "name": self.get_inst_name(inst),
+                                    "relationship": True,
+                                }
+                            )
+                lst.append(
+                    {
+                        "model": model_name,
+                        "name": self.get_inst_name(obj),
+                        "children": lst2,
+                    }
+                )
         return lst
 
     def __get_cascaded_msg(self, parent_model_name, cascaded, level):
         for dic in cascaded:
-            model_name = dic['model']
-            inst_name = dic['name']
-            is_related = dic.get('relationship', False)
-            children = dic.get('children', None)
+            model_name = dic["model"]
+            inst_name = dic["name"]
+            is_related = dic.get("relationship", False)
+            children = dic.get("children", None)
             if is_related is True:
-                print(" " * level + f"{parent_model_name}-{model_name} Relationship: {inst_name}")
+                print(
+                    " " * level
+                    + f"{parent_model_name}-{model_name} Relationship: {inst_name}"
+                )
             else:
                 print(" " * level + f"{model_name}: {inst_name}")
             if children:
                 self.__get_cascaded_msg(model_name, children, level + 2)
-
-
-
-
-
-
-
