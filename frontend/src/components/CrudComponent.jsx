@@ -41,7 +41,7 @@ export function FormField({ name, register, configs = {}, errors = {} }) {
     }
     return (
         <React.Fragment>
-            <p>{formField}</p>
+            {formField}
             <ErrorMessage errors={errors} name={name} />
         </ React.Fragment>
     )
@@ -89,7 +89,7 @@ export function TableComponent({ name, url, tableFields, permissions, handleEdit
                 {data.map((obj, rowIndex) => {
                     return (
                         <tr key={rowIndex}>
-                            {Object.keys(tableFields).map((key, dataIndex) => <td key={dataIndex}>{obj[key]}</td>)}
+                            {Object.keys(tableFields).map((key, dataIndex) => <td key={dataIndex}>{obj[key]?.toString()}</td>)}
                             {showActions && (
                                 <>
                                     {__change && <td><button onClick={() => handleEdit(obj.rec_id)}>edit</button></td>}

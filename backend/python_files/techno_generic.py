@@ -7,7 +7,7 @@ from collections import defaultdict
 from django.core.exceptions import ImproperlyConfigured
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.core.validators import FileExtensionValidator
-from django.db.models import ProtectedError, Q
+from django.db.models import ProtectedError, Q, ManyToManyField
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.exceptions import MethodNotAllowed, ValidationError
@@ -184,6 +184,7 @@ class ReactHookForm:
                 k: v for k, v in serializer_fields.items() if k not in exclude
             }
         for key, field in serializer_fields.items():
+            model_field = self.__get_model_field(key)
             if key in self.__verbose_name:
                 field_name = self.__verbose_name[key]
             else:
@@ -196,7 +197,7 @@ class ReactHookForm:
             # configs[key]['validators'] = self.__get_validators(field, field_type, field_name)
             if field_type == "select":
                 configs[key]["options"] = self.__get_options(key, field)
-            default_values[key] = self.__get_default_values(field)
+            default_values[key] = self.__get_default_values(model_field)
         return {
             "fields": configs,
             "defaultValues": default_values,
@@ -252,12 +253,11 @@ class ReactHookForm:
         return validators
 
     @staticmethod
-    def __get_default_values(field):
-        if hasattr(field, "default") and not type(field.default) == type:
-            return field.default
-        if field.initial is not None:
-            return field.initial
-        return ""
+    def __get_default_values(model_field):
+        if isinstance(model_field, ManyToManyField):
+            return []
+        if not type(model_field.default) == type:
+            return model_field.default
 
     def __get_field_type(self, field):
         if (
@@ -308,6 +308,9 @@ class ReactHookForm:
             ]
 
         return []
+
+    def __get_model_field(self, key):
+        return self.__serializer.Meta.model._meta.get_field(key)
 
 
 class TechnoSerializerValidation:

@@ -25,9 +25,6 @@ function ModuleConfigurationHelper({ name, url }) {
         is_global_menu: 'Global Menu',
         page_url: 'Link',
         sequence: 'Sequence',
-        react_box_icon: 'Icon',
-        permissions: 'Permissions',
-        children: 'Children',
     }
 
     const dispatch = useDispatch()
@@ -81,28 +78,22 @@ function ModuleConfigurationHelper({ name, url }) {
                                 <FormField {...{ register, name: 'codename', configs: formFields.fields.codename, errors }} />
                             </div>
                             <div style={{ marginBottom: '20px' }}>
-                                <FormField {...{ register, name: 'codenamemenu_type', configs: formFields.fields.menu_type, errors }} />
+                                <FormField {...{ register, name: 'menu_type', configs: formFields.fields.menu_type, errors }} />
                             </div>
                             <div style={{ marginBottom: '20px' }}>
-                                <FormField {...{ register, name: 'codenameis_root_menu', configs: formFields.fields.is_root_menu, errors }} />
+                                <FormField {...{ register, name: 'is_root_menu', configs: formFields.fields.is_root_menu, errors }} />
                             </div>
                             <div style={{ marginBottom: '20px' }}>
-                                <FormField {...{ register, name: 'codenameis_global_menu', configs: formFields.fields.is_global_menu, errors }} />
+                                <FormField {...{ register, name: 'is_global_menu', configs: formFields.fields.is_global_menu, errors }} />
                             </div>
                             <div style={{ marginBottom: '20px' }}>
-                                <FormField {...{ register, name: 'codenamepage_url', configs: formFields.fields.page_url, errors }} />
+                                <FormField {...{ register, name: 'page_url', configs: formFields.fields.page_url, errors }} />
                             </div>
                             <div style={{ marginBottom: '20px' }}>
-                                <FormField {...{ register, name: 'codenamesequence', configs: formFields.fields.sequence, errors }} />
+                                <FormField {...{ register, name: 'sequence', configs: formFields.fields.sequence, errors }} />
                             </div>
                             <div style={{ marginBottom: '20px' }}>
-                                <FormField {...{ register, name: 'codenamereact_box_icon', configs: formFields.fields.react_box_icon, errors }} />
-                            </div>
-                            <div style={{ marginBottom: '20px' }}>
-                                <FormField {...{ register, name: 'codenamepermissions', configs: formFields.fields.permissions, errors }} />
-                            </div>
-                            <div style={{ marginBottom: '20px' }}>
-                                <FormField {...{ register, name: 'children', configs: formFields.fields.children, errors }} />
+                                <FormField {...{ register, name: 'react_box_icon', configs: formFields.fields.react_box_icon, errors }} />
                             </div>
                             <button>{mode === 'Create' ? 'Submit' : 'Update'}</button>
                             <button type='button' onClick={handleReset} style={{ marginLeft: 10 }}>Cancel</button>

@@ -1,6 +1,15 @@
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
+import { fetchSideBarData } from "../../slices/global/sidebarSlice";
+import { useDispatch } from "react-redux";
 
 export function Navigation() {
+
+    const dispatch = useDispatch()
+    useEffect(() => {
+        let api = fetchSideBarData()
+        dispatch(api())
+    }, [])
 
     return <ul>
         <li>

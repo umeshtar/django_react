@@ -16,16 +16,17 @@ from app_system.models import CustomUser
 from python_files.techno_generic import TechnoPermissionMixin, TechnoGenericAPIView, ClientException
 
 
-class LayoutView(TechnoPermissionMixin, APIView):
+class SideBarView(TechnoPermissionMixin, APIView):
     model = ModuleConfiguration
     queryset = ModuleConfiguration.objects.filter(is_del=False).select_related(
         'react_box_icon'
     ).prefetch_related(
         'permissions', 'permissions__content_type', 'children'
     ).order_by('sequence')
-    modules = ['global_search']
+    modules = ['sidebar']
 
     def __init__(self, *args, **kwargs):
+        print('init')
         super().__init__(*args, **kwargs)
         self.recur_check = 100
         self.all_modules = []
@@ -42,8 +43,7 @@ class LayoutView(TechnoPermissionMixin, APIView):
             custom_perms = self.get_custom_permission()
             if custom_perms:
                 permissions['__custom'] = custom_perms
-
-            return Response({
+            return Response(data={
                 'data': data,
                 'all_modules': all_modules,
                 'is_permission_manager': is_permission_manager,
@@ -103,7 +103,7 @@ class LayoutView(TechnoPermissionMixin, APIView):
             return lst
 
         main_menus = self.queryset.filter(Q(is_main_menu=True) | Q(is_global_menu=True)).order_by('sequence')
-        return [{'label': 'Menu', 'isHeader': True}] + get_recur_modules(main_menus)
+        return get_recur_modules(main_menus)
 
 
 class ModuleWiseGroupPermissionView(TechnoGenericAPIView):
@@ -267,6 +267,3 @@ class ModuleConfigurationView(TechnoGenericAPIView):
     model = ModuleConfiguration
     serializer_class = ModuleConfigurationSerializer
     modules = ['module_configuration']
-
-
-
