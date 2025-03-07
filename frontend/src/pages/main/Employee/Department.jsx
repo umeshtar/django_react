@@ -1,7 +1,7 @@
 import { useDispatch, useSelector } from "react-redux";
 import { fetchSingleRecordThunk, handleFormSubmit } from "../../../slices/crud/crudSlice";
 import { BaseComponent, FormField, TableComponent, TitleComponent } from "../../../components/CrudComponent";
-import { resetForm } from "../../../slices/main/employee/departmentSlice";
+import { DepartmentResetForm } from "../../../slices/main/employee/departmentSlice";
 import { useFieldArray, useForm } from "react-hook-form";
 import { Navigation } from "../../dashboard/Navigation";
 
@@ -46,14 +46,14 @@ function DepartmentHelper({ name, url }) {
             successCallBack: (response) => {
                 reset()
                 const { employees: employeeData, ...formData } = response.data.data
-                Object.entries(formData).forEach(([k, v])=> setValue(k, v))
+                Object.entries(formData).forEach(([k, v]) => setValue(k, v))
                 employees.replace(employeeData)
             },
         }))
     }
     function handleReset() {
         reset()
-        dispatch(resetForm())
+        dispatch(DepartmentResetForm())
     }
     return (
         <>

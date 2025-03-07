@@ -2,7 +2,7 @@ from django.contrib.auth.models import Group
 
 from app_permission.models import ModuleConfiguration
 from app_system.models import CustomUser
-from python_files.techno_generic import TechnoListSerializer, TechnoSelectSerializer
+from python_files.techno_generic import TechnoListSerializer, TechnoSelectSerializer, TechnoModelSerializer
 
 
 class ModuleConfigSerializer(TechnoListSerializer):
@@ -29,3 +29,10 @@ class GroupWithUsersSelectSerializer(TechnoSelectSerializer):
         model = Group
         fields = ['user_set']
 
+
+class ModuleConfigurationSerializer(TechnoModelSerializer):
+    class Meta:
+        model = ModuleConfiguration
+        fields = ['name', 'codename', 'menu_type', 'is_root_menu',
+                  'is_global_menu', 'page_url', 'sequence', 'react_box_icon',
+                  'permissions', 'children']

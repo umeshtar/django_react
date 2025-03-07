@@ -5,6 +5,7 @@ import Cookies from "js-cookie";
 import { PageNotFound } from "../components/PageNotFound";
 import { employeeRoutes } from "./main/emp.routes";
 import { Dashboard } from "../pages/dashboard/Dashboard";
+import { permissionRoutes } from "./main/permission.routes";
 
 const authUser = Cookies.get("authUser")
 
@@ -16,6 +17,7 @@ const publicRoutes = [
 export const protectedRoutes = [
     { path: "dashboard", element: <Dashboard /> },
     { path: "emp/", element: <Outlet />, children: employeeRoutes },
+    { path: "permission/", element: <Outlet />, children: permissionRoutes },
 ]
 
 export const router = createBrowserRouter([

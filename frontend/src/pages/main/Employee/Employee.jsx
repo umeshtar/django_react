@@ -2,7 +2,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { fetchSingleRecordThunk, handleFormSubmit } from "../../../slices/crud/crudSlice";
 import { BaseComponent, FormField, TableComponent, TitleComponent } from "../../../components/CrudComponent";
 import { useForm } from "react-hook-form";
-import { resetForm } from "../../../slices/main/employee/employeeSlice";
+import { EmployeeResetForm } from "../../../slices/main/employee/employeeSlice";
 import { Navigation } from "../../dashboard/Navigation";
 
 export function Employee() {
@@ -24,7 +24,7 @@ function EmployeeHelper({ name, url }) {
     const formFields = useSelector((state) => state[name].formFields)
     const permissions = useSelector((state) => state[name].permissions)
     const mode = useSelector((state) => state[name].mode)
-    
+
     const { register, handleSubmit, reset, setValue, setError, formState: { errors } } = useForm({
         defaultValues: formFields.defaultValues
     })
@@ -50,7 +50,7 @@ function EmployeeHelper({ name, url }) {
     }
     function handleReset() {
         reset()
-        dispatch(resetForm())
+        dispatch(EmployeeResetForm())
     }
     return (
         <>

@@ -10,7 +10,8 @@ from rest_framework.views import APIView
 
 from app_permission.models import ModuleConfiguration, CustomPermission
 from app_permission.permissions import ModuleWiseGroupPermissions
-from app_permission.serializers import ModuleConfigSerializer, GroupWithUsersSelectSerializer, CustomUserSelectSerializer
+from app_permission.serializers import ModuleConfigSerializer, GroupWithUsersSelectSerializer, CustomUserSelectSerializer, \
+    ModuleConfigurationSerializer
 from app_system.models import CustomUser
 from python_files.techno_generic import TechnoPermissionMixin, TechnoGenericAPIView, ClientException
 
@@ -260,5 +261,12 @@ class ModuleWiseGroupPermissionView(TechnoGenericAPIView):
         except:
             transaction.rollback()
             raise
+
+
+class ModuleConfigurationView(TechnoGenericAPIView):
+    model = ModuleConfiguration
+    serializer_class = ModuleConfigurationSerializer
+    modules = ['module_configuration']
+
 
 

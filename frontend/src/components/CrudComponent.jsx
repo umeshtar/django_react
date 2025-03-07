@@ -14,17 +14,29 @@ export function FormField({ name, register, configs = {}, errors = {} }) {
     let formField;
     if (configs.type === 'select') {
         formField = (
-            <>
+            <div>
+                <label>{configs.name}</label>
                 <select {...register(name, configs?.rules || {})} required={required} >
                     <option value="" disabled>{`Select ${configs.name}`}</option>
                     {configs.options.map((opt, i) => <option key={i} value={opt.value}>{opt.label}</option>)}
                 </select>
-            </>
+            </div>
+        )
+
+    } else if (configs.type === 'checkbox') {
+        formField = (
+            <div>
+                <label>{configs.name}</label>
+                <input type='checkbox' {...register(name, configs?.rules || {})} />
+            </div>
         )
 
     } else {
         formField = (
-            <input {...register(name, configs?.rules || {})} placeholder={`Enter ${configs.name}`} required={required} />
+            <div>
+                <label>{configs.name}</label>
+                <input {...register(name, configs?.rules || {})} placeholder={`Enter ${configs.name}`} required={required} />
+            </div>
         )
     }
     return (
