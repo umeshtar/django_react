@@ -26,45 +26,34 @@ class SideBarView(TechnoPermissionMixin, APIView):
     modules = ['sidebar']
 
     def __init__(self, *args, **kwargs):
-        print('init')
         super().__init__(*args, **kwargs)
         self.recur_check = 100
         self.all_modules = []
 
     def get(self, request, *args, **kwargs):
-        action = request.GET.get('action', None)
-        if action == 'get_modules_data':
-            data = self.get_modules_data()
-            all_modules = self.all_modules
-            is_permission_manager = request.user.has_model_perms(Group, 'change')
-            permissions = {
-                **self.get_extra_modules_permissions(),
-            }
-            custom_perms = self.get_custom_permission()
-            if custom_perms:
-                permissions['__custom'] = custom_perms
-            return Response(data={
-                'data': data,
-                'all_modules': all_modules,
-                'is_permission_manager': is_permission_manager,
-                'permissions': permissions,
-            }, status=status.HTTP_200_OK)
-
-        return Response({'Error': 'Invalid Action'}, status=status.HTTP_400_BAD_REQUEST)
+        data = self.get_modules_data()
+        all_modules = self.all_modules
+        is_permission_manager = request.user.has_model_perms(Group, 'change')
+        return Response(data={
+            'data': data,
+            'all_modules': all_modules,
+            'is_permission_manager': is_permission_manager,
+        }, status=status.HTTP_200_OK)
 
     def get_modules_data(self):
-        def get_recur_modules(menus):
+        def get_recur_modules(menus, path=()):
             if self.recur_check <= 0:
                 raise Exception('Allowed Recur Length Exceeded for Module Configuration')
             self.recur_check -= 1
             lst = []
             for menu in menus:
-                if menu.module_type == 'dropdown':
-                    children = get_recur_modules(menu.children.all().order_by('sequence'))
+                if menu.menu_type == 'dropdown':
+                    children = get_recur_modules(menus=menu.children.all().order_by('sequence'), path=[*path, menu.codename])
                     if children:
                         self.all_modules.append({
                             'codename': menu.codename,
                             'name': menu.name,
+                            'path': [*path, menu.codename],
                         })
                         lst.append({
                             'id': menu.codename,
@@ -74,7 +63,7 @@ class SideBarView(TechnoPermissionMixin, APIView):
                             'subItems': children,
                         })
 
-                elif menu.module_type == 'navigation' or menu.module_type == 'route':
+                elif menu.menu_type == 'navigation' or menu.menu_type == 'route':
                     perms = menu.permissions.all()
                     if perms.exists():
                         has_perm = any([
@@ -88,9 +77,10 @@ class SideBarView(TechnoPermissionMixin, APIView):
                             'codename': menu.codename,
                             'link': menu.page_url,
                             'name': menu.name,
+                            'path': [*path, menu.codename],
                         })
-                        children = get_recur_modules(menu.children.order_by('sequence'))
-                        if menu.module_type == 'navigation':
+                        children = get_recur_modules(menus=menu.children.order_by('sequence'), path=[*path, menu.codename])
+                        if menu.menu_type == 'navigation':
                             dic = {
                                 'id': menu.codename,
                                 'label': menu.name,
@@ -102,7 +92,7 @@ class SideBarView(TechnoPermissionMixin, APIView):
                             lst.append(dic)
             return lst
 
-        main_menus = self.queryset.filter(Q(is_main_menu=True) | Q(is_global_menu=True)).order_by('sequence')
+        main_menus = self.queryset.filter(Q(is_root_menu=True) | Q(is_global_menu=True)).order_by('sequence')
         return get_recur_modules(main_menus)
 
 

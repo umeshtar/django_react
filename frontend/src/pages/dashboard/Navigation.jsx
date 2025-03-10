@@ -1,9 +1,11 @@
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { fetchSideBarData } from "../../slices/global/sidebarSlice";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 
 export function Navigation() {
+
+    const data = useSelector((state) => state.sidebar.data)
 
     const dispatch = useDispatch()
     useEffect(() => {
@@ -11,28 +13,31 @@ export function Navigation() {
         dispatch(api())
     }, [])
 
-    return <ul>
-        <li>
-            <Link to="/dashboard">Dashboard</Link>
-        </li>
+    const NavigationElement = ({ label, link }) => {
+        return (
+            <li>
+                <Link to={link}>{label}</Link>
+            </li>
+        )
+    }
 
-        <li>Employee
-            <ul>
-                <li>
-                    <Link to="/emp/dept">Department</Link>
-                </li>
-                <li>
-                    <Link to="/emp">Employee</Link>
-                </li>
-            </ul>
-        </li>
-        <li>Permission
-            <ul>
-                <li>
-                    <Link to="/permission/module_configuration">Module Configuration</Link>
-                </li>
-            </ul>
-        </li>
-    </ul>
+    const DropDownElement = ({ label, subItems }) => {
+        return (
+            <li>{label}
+                <ul>
+                    {subItems.map((subItem, index) => <NavigationElement key={index} {...subItem} />)}
+                </ul>
+            </li>
+        )
+    }
+
+    return (
+        <ul>
+            {data.map((item, index) => {
+                if (item.subItems) return <DropDownElement key={index} {...item} />
+                else return <NavigationElement key={index} {...item} />
+            })}
+        </ul>
+    )
 }
 

@@ -3,7 +3,7 @@ import { baseAsyncThunk } from '../crud/crudSlice';
 import { authFetch } from '../../helpers/fetch';
 
 export function fetchSideBarData() {
-    return baseAsyncThunk({ name: 'sidebar', action: 'fetchSideBarData', func: (data) => authFetch.get('permission/sidebar') })
+    return baseAsyncThunk({ name: 'sidebar', action: 'fetchSideBarData', func: (data) => authFetch.get('permission/sidebar/') })
 }
 
 const sidebarSlice = createSlice({

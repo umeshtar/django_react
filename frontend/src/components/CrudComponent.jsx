@@ -104,16 +104,29 @@ export function TableComponent({ name, url, tableFields, permissions, handleEdit
     )
 }
 
-export function TitleComponent({ title }) {
+export function TitleComponent() {
     console.log('Render - TitleComponent');
+    const all_modules = useSelector((state) => state.sidebar.all_modules)
+    const link = window.location.origin + window.location.pathname
+    const matches = all_modules.filter(obj => obj.link === link)
+    let result = []
+    if (matches.length > 0) {
+        matches[0]?.path?.forEach((codename) => {
+            let module = all_modules.find(obj => obj.codename === codename)
+            if (module && module.name) {
+                result.push(module.name)
+            }
+        })
+    }
+    const title = result.join(' -- ')
+
     return (
         <header className="header">
-            <h1>{title}</h1>
+            <h1>{title || 'No Title Found'}</h1>
             <button className="logout-button" onClick={handleLogout}>Logout</button>
         </header>
     )
 }
-
 
 export function BaseComponent({ name, url, children }) {
     console.log("Render - BaseComponent");

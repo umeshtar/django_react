@@ -11,8 +11,12 @@ from django.contrib.auth.models import Group
 
 
 if __name__ == "__main__":
-    s = CustomUserSelectSerializer(CustomUser.objects.all(), many=True)
-    pprint(s.data)
+    lst = [1, 2, 3]
+    print(lst)
 
-    s = GroupWithUsersSelectSerializer(Group.objects.all(), many=True)
-    pprint(s.data)
+    lst2 = [*lst, 4]
+    print(lst2)
+
+
+
+
