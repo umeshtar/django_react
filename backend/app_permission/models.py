@@ -6,6 +6,7 @@ from django.db import models
 from app_system.models import RecurField
 from python_files.techno_validators import validate_codename
 
+
 # Create your models here.
 
 
@@ -47,9 +48,8 @@ class ModuleConfiguration(RecurField):
     sequence = models.PositiveSmallIntegerField(default=0)
     react_box_icon = models.ForeignKey(ReactBoxIcon, on_delete=models.PROTECT)
     permissions = models.ManyToManyField(Permission, blank=True)
-    children = models.ManyToManyField(
-        "self", blank=True, symmetrical=False, related_name="parents"
-    )
+    children = models.ManyToManyField("self", blank=True, symmetrical=False, related_name="parents")
+    dynamic_form = models.ForeignKey('DynamicForm', on_delete=models.PROTECT, null=True, blank=True)
 
 
 class CustomPermission(RecurField):
@@ -83,4 +83,42 @@ class CustomPermission(RecurField):
 class UserDefinedContentType(ContentType):
     """
     For Dynamic Board and Items with Crud, Customization and Permissions (Not Final Yet)
+    Forms
+    Fields with Validations
+    - TextField with required validation
+    Store fields map as json field
+    Records
+    Store as json field
+    List
+    Filter
+    Permission
     """
+
+
+class DynamicForm(RecurField):
+    pass
+
+
+class DynamicFormField(RecurField):
+    field_type_choices = [
+        ('text', 'Text Input'),
+    ]
+    codename = models.CharField(max_length=100)
+    field_type = models.CharField(choices=field_type_choices, max_length=50)
+    validation = models.JSONField()  # {'required': False, 'max_length': 100}
+    dynamic_form = models.ForeignKey(DynamicForm, on_delete=models.CASCADE, related_name='fields')
+
+
+class DynamicFormRecord(RecurField):
+    name = None
+    record = models.JSONField()
+    dynamic_form = models.ForeignKey(DynamicForm, on_delete=models.CASCADE, related_name='records')
+
+    def __str__(self):
+        return str(self.pk)
+
+
+class DynamicFormPermission(RecurField):
+    dynamic_form = models.ForeignKey(DynamicForm, models.CASCADE, related_name='dynamic_permissions')
+    users = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True, related_name='dynamic_permissions')
+

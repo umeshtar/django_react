@@ -8,7 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from app_permission.models import ModuleConfiguration, CustomPermission
+from app_permission.models import ModuleConfiguration, CustomPermission, DynamicForm, DynamicFormRecord
 from app_permission.permissions import ModuleWiseGroupPermissions
 from app_permission.serializers import ModuleConfigSerializer, GroupWithUsersSelectSerializer, CustomUserSelectSerializer, \
     ModuleConfigurationSerializer
@@ -77,6 +77,7 @@ class SideBarView(TechnoPermissionMixin, APIView):
                             'codename': menu.codename,
                             'link': menu.page_url,
                             'name': menu.name,
+                            'dynamic_form': menu.dynamic_form.id if menu.dynamic_form else '',
                             'path': [*path, menu.codename],
                         })
                         children = get_recur_modules(menus=menu.children.order_by('sequence'), path=[*path, menu.codename])
@@ -257,3 +258,101 @@ class ModuleConfigurationView(TechnoGenericAPIView):
     model = ModuleConfiguration
     serializer_class = ModuleConfigurationSerializer
     modules = ['module_configuration']
+
+
+class DynamicModuleView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        rec_id = self.kwargs.get('rec_id')
+        print(f"{rec_id=}")
+        dynamic_form = DynamicForm.objects.get(pk=rec_id)
+
+        response = dict()
+        can_view = self.request.user.has_dynamic_perms(dynamic_form, "View")
+        can_add = self.request.user.has_dynamic_perms(dynamic_form, "Add")
+        can_change = self.request.user.has_dynamic_perms(dynamic_form, "Change")
+        can_delete = self.request.user.has_dynamic_perms(dynamic_form, "Delete")
+        can_view = can_view or can_change or can_delete
+
+        get_data = self.has_action("get_data")
+        fetch_record = self.has_action("fetch_record")
+
+        is_form = self.has_param("is_form")
+        get_perms = self.has_param("get_perms")
+        get_form_configs = self.has_param("get_form_configs")
+        get_title = self.has_param("get_title")
+        get_fields = self.has_param("get_fields") or True
+
+        if get_perms:
+            response["permissions"] = {
+                '__add': can_add,
+                '__change': can_change,
+                '__view': can_view,
+                '__delete': can_delete,
+            }
+
+        if get_title:
+            response["title"] = dynamic_form.name
+
+        if get_form_configs:
+            response["form_configs"] = (
+                self.get_form_configs(dynamic_form) if (can_add or can_change) else dict()
+            )
+
+        if get_fields:
+            response['fields'] = {row.codename: row.name for row in dynamic_form.fields.all()}
+
+        if get_data:
+            response["data"] = [row.record for row in dynamic_form.records.all()] if can_view else []
+
+        elif fetch_record:
+            record = self.get_request_data().get("rec_id")
+            if is_form:
+                response["data"] = record.record if (can_add or can_change) else dict()
+            else:
+                response["data"] = record.record if (can_add or can_change) else dict()
+
+        return Response(response, status=status.HTTP_200_OK)
+
+    def post(self, request, *args, **kwargs):
+        pass
+
+    def put(self, request, *args, **kwargs):
+        pass
+
+    def delete(self, request, *args, **kwargs):
+        pass
+
+    def get_request_data(self):
+        if self.request.method in ["GET", "DELETE"]:
+            return self.request.GET
+        if self.request.method in ["PUT", "POST"]:
+            return self.request.data
+        raise Exception("Invalid Request")
+
+    @staticmethod
+    def get_form_configs(dynamic_form):
+        configs = dict()
+        default_values = dict()
+        for field in dynamic_form.fields.all():
+            field_name = field.name
+            key = field.codename
+            field_type = field.field_type
+            validation = field.validation or dict()
+
+            configs[key] = dict(type=field_type, name=field_name)
+            # configs[key]['validators'] = "Frontend Pending"
+            if field_type == "select":
+                configs[key]["options"] = validation.get('choices')
+            default_values[key] = validation.get('default', None)
+        return {
+            "fields": configs,
+            "defaultValues": default_values,
+        }
+
+    def has_param(self, key):
+        return self.get_request_data().get(key, "False").lower() == "true"
+
+    def has_action(self, key):
+        return self.get_request_data().get("action", None) == key

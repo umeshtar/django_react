@@ -68,6 +68,7 @@ export function createCrudSlice({ name, initialState = {}, reducers = {}, extraR
             data: [],
             record: undefined,
             formFields: undefined,
+            tableFields: undefined,
             permissions: {},
             mode: 'Create',
             ...initialState,
@@ -85,6 +86,7 @@ export function createCrudSlice({ name, initialState = {}, reducers = {}, extraR
                     state.title = action.payload.title
                     state.data = action.payload.data
                     state.formFields = action.payload.form_configs
+                    state.tableFields = action.payload.fields
                     state.permissions = action.payload.permissions
                 })
                 .addCase(`${name}/fetchSingleRecord/fulfilled`, (state, action) => {

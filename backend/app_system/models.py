@@ -80,6 +80,21 @@ class CustomUser(AbstractUser):
         func = any if key == "any" else all
         return func([self.has_perm(perm_code.format(perm=perm)) for perm in perms])
 
+    def has_dynamic_perms(self, dynamic_form, *perms, key='all'):
+        if self.is_active and self.is_superuser:
+            return True
+
+        if not perms:
+            perms = ("View", "Add", "Change", "Delete")
+
+        perm_code = f"{{perm}} {dynamic_form.name}"
+
+        func = any if key == "any" else all
+        queryset = getattr(self, 'dynamic_permissions', None)
+        if queryset:
+            dynamic_permissions = queryset.filter(dynamic_form=dynamic_form).values_list('name', flat=True)
+            return func([perm_code.format(perm=perm) in dynamic_permissions for perm in perms])
+        return False
 
 class SystemConfiguration(RecurField):
     pass
