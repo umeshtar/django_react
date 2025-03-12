@@ -265,7 +265,6 @@ class DynamicModuleView(APIView):
 
     def get(self, request, *args, **kwargs):
         rec_id = self.kwargs.get('rec_id')
-        print(f"{rec_id=}")
         dynamic_form = DynamicForm.objects.get(pk=rec_id)
 
         response = dict()
@@ -304,25 +303,47 @@ class DynamicModuleView(APIView):
             response['fields'] = {row.codename: row.name for row in dynamic_form.fields.all()}
 
         if get_data:
-            response["data"] = [row.record for row in dynamic_form.records.all()] if can_view else []
+            response["data"] = [{**row.record, 'rec_id': row.pk} for row in dynamic_form.records.all()] if can_view else []
 
         elif fetch_record:
-            record = self.get_request_data().get("rec_id")
+            rec_id = self.get_request_data().get("rec_id")
+            record = DynamicFormRecord.objects.get(pk=rec_id, dynamic_form=dynamic_form)
             if is_form:
-                response["data"] = record.record if (can_add or can_change) else dict()
+                response["data"] = {**record.record, 'rec_id': record.pk} if (can_add or can_change) else dict()
             else:
-                response["data"] = record.record if (can_add or can_change) else dict()
+                response["data"] = {**record.record, 'rec_id': record.pk} if (can_add or can_change) else dict()
 
         return Response(response, status=status.HTTP_200_OK)
 
     def post(self, request, *args, **kwargs):
-        pass
+        dynamic_form = DynamicForm.objects.get(pk=self.kwargs.get('rec_id'))
+        record = DynamicFormRecord.objects.create(record=self.get_request_data(), dynamic_form=dynamic_form)
+        return Response(
+            data={'data': {**record.record, 'rec_id': record.pk}, 'message': f"{dynamic_form.name} Created Successfully"},
+            status=status.HTTP_201_CREATED
+        )
 
     def put(self, request, *args, **kwargs):
-        pass
+        dynamic_form = DynamicForm.objects.get(pk=self.kwargs.get('rec_id'))
+        record = DynamicFormRecord.objects.get(pk=self.get_request_data().pop('rec_id'), dynamic_form=dynamic_form)
+        record.record = self.get_request_data()
+        record.save()
+        return Response(
+            data={'data': {**record.record, 'rec_id': record.pk}, 'message': f"{dynamic_form.name} Updated Successfully"},
+            status=status.HTTP_200_OK
+        )
 
     def delete(self, request, *args, **kwargs):
-        pass
+        dynamic_form = DynamicForm.objects.get(pk=self.kwargs.get('rec_id'))
+        ids = self.get_request_data().getlist('ids[]', [])
+        records = DynamicFormRecord.objects.filter(pk__in=ids)
+        for record in records:
+            record.is_del = True
+            record.save()
+        return Response(
+            data={'delete_confirmation': True, 'ids': ids, 'message': f"{dynamic_form.name} Deleted Successfully"},
+            status=status.HTTP_200_OK
+        )
 
     def get_request_data(self):
         if self.request.method in ["GET", "DELETE"]:

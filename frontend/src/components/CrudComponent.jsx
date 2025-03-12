@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { handleLogout } from '../pages/login/Login';
 import { ErrorMessage } from '@hookform/error-message';
 import { deleteRecordThunk, fetchDataThunk } from '../slices/crud/crudSlice';
+import { fetchSideBarData } from '../slices/global/sidebarSlice';
 
 
 export function FormField({ name, register, configs = {}, errors = {} }) {
@@ -47,7 +48,7 @@ export function FormField({ name, register, configs = {}, errors = {} }) {
     )
 }
 
-export function TableComponent({ name, url, tableFields, permissions, handleEdit }) {
+export function TableComponent({ name, url, tableFields, permissions, handleEdit, dynamic = false }) {
     console.log('Render - TableComponent');
 
     const dispatch = useDispatch()
@@ -58,23 +59,33 @@ export function TableComponent({ name, url, tableFields, permissions, handleEdit
 
     function handleDelete(rec_id) {
         let api = deleteRecordThunk({ name, url })
-        dispatch(api({
-            ids: [rec_id],
-            delete_confirmation: false,
-            successCallBack: (data) => {
-                const msg_type = data?.data?.delete_context?.msg_type
-                if (msg_type === 'protect') {
-                    alert(data.data.delete_context.protect_msg)
-                } else if (msg_type === 'cascade') {
-                    if (confirm('Are you sure?')) {
-                        dispatch(api({
-                            ids: [rec_id],
-                            delete_confirmation: true,
-                        }))
+        if (dynamic === true) {
+            if (confirm('Are you sure?')) {
+                dispatch(api({
+                    ids: [rec_id],
+                    delete_confirmation: true,
+                }))
+            }
+        } else {
+            dispatch(api({
+                ids: [rec_id],
+                delete_confirmation: false,
+                successCallBack: (data) => {
+                    const msg_type = data?.data?.delete_context?.msg_type
+                    if (msg_type === 'protect') {
+                        alert(data.data.delete_context.protect_msg)
+                    } else if (msg_type === 'cascade') {
+                        if (confirm('Are you sure?')) {
+                            dispatch(api({
+                                ids: [rec_id],
+                                delete_confirmation: true,
+                            }))
+                        }
                     }
                 }
-            }
-        }))
+            }))
+        }
+
     }
 
     return (
@@ -106,7 +117,7 @@ export function TableComponent({ name, url, tableFields, permissions, handleEdit
 
 export function TitleComponent() {
     console.log('Render - TitleComponent');
-    const all_modules = useSelector((state) => state.sidebar.all_modules)
+    const all_modules = useSelector((state) => state.sidebar.all_modules) || []
     const link = window.location.origin + window.location.pathname
     const matches = all_modules.filter(obj => obj.link === link)
     let result = []
@@ -132,16 +143,22 @@ export function BaseComponent({ name, url, children }) {
     console.log("Render - BaseComponent");
 
     const [init, setInit] = useState(false)
+    const all_modules = useSelector((state) => state.sidebar.all_modules)
 
     const dispatch = useDispatch()
     useEffect(() => {
-        let fetchApi = fetchDataThunk({ name, url })
-        dispatch(fetchApi({
-            successCallBack: () => {
-                setInit(true)
-            }
-        }))
-    }, [])
+        if (all_modules === null) {
+            let api = fetchSideBarData()
+            dispatch(api())
+        } else {
+            let fetchApi = fetchDataThunk({ name, url })
+            dispatch(fetchApi({
+                successCallBack: () => {
+                    setInit(true)
+                }
+            }))
+        }
+    }, [all_modules])
 
     return (
         init === true ? children : "Loading..."

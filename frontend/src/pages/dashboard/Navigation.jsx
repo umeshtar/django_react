@@ -6,11 +6,14 @@ import { useDispatch, useSelector } from "react-redux";
 export function Navigation() {
 
     const data = useSelector((state) => state.sidebar.data)
+    const all_modules = useSelector((state) => state.sidebar.all_modules)
 
     const dispatch = useDispatch()
     useEffect(() => {
-        let api = fetchSideBarData()
-        dispatch(api())
+        if (all_modules === null) {
+            let api = fetchSideBarData()
+            dispatch(api())
+        }
     }, [])
 
     const NavigationElement = ({ label, link }) => {

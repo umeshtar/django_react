@@ -6,10 +6,8 @@ import { useForm } from "react-hook-form"
 import { Navigation } from "../dashboard/Navigation"
 
 export function DynamicModule() {
-    const all_modules = useSelector((state) => state.sidebar.all_modules)
+    const all_modules = useSelector((state) => state.sidebar.all_modules) || []
     const link = window.location.origin + window.location.pathname
-    console.log({ all_modules, link });
-
     const formId = all_modules.find(obj => obj.link === link)?.dynamic_form
     const name = 'dynamic'
     const url = `permission/dynamic_modules/${formId}/`
@@ -39,7 +37,9 @@ function DynamicModuleHelper({ name, url }) {
     const showTable = tableFields && (__view) ? true : false
 
     function onSubmit(data) {
+        console.log({ data });
         if ((mode === 'Update' && data.rec_id && __change) || (mode === 'Create' && __add)) {
+            console.log('Update');
             handleFormSubmit({ name, url, data, reset, setError, dispatch })
         }
     }
@@ -77,7 +77,7 @@ function DynamicModuleHelper({ name, url }) {
                         </form >
                     )}
                     <hr />
-                    {showTable && <TableComponent {...{ name, url, tableFields, permissions, handleEdit }} />}
+                    {showTable && <TableComponent {...{ name, url, tableFields, permissions, handleEdit, dynamic: true }} />}
                 </div>
             </div>
         </>

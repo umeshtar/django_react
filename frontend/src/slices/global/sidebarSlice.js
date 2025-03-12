@@ -10,8 +10,8 @@ const sidebarSlice = createSlice({
     name: 'sidebar',
     initialState: {
         data: [],
-        all_modules: [],
-        is_permission_manager: [],
+        all_modules: null,
+        is_permission_manager: false,
     },
     reducers: {},
     extraReducers: (builder) => {
