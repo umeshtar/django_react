@@ -49,7 +49,7 @@ class ModuleConfiguration(RecurField):
     react_box_icon = models.ForeignKey(ReactBoxIcon, on_delete=models.PROTECT)
     permissions = models.ManyToManyField(Permission, blank=True)
     children = models.ManyToManyField("self", blank=True, symmetrical=False, related_name="parents")
-    dynamic_form = models.ForeignKey('DynamicForm', on_delete=models.PROTECT, null=True, blank=True)
+    dynamic_form = models.ForeignKey('app_dynamic.DynamicForm', on_delete=models.PROTECT, null=True, blank=True)
 
 
 class CustomPermission(RecurField):
@@ -94,31 +94,4 @@ class UserDefinedContentType(ContentType):
     Permission
     """
 
-
-class DynamicForm(RecurField):
-    pass
-
-
-class DynamicFormField(RecurField):
-    field_type_choices = [
-        ('text', 'Text Input'),
-    ]
-    codename = models.CharField(max_length=100)
-    field_type = models.CharField(choices=field_type_choices, max_length=50)
-    validation = models.JSONField()  # {'required': False, 'max_length': 100}
-    dynamic_form = models.ForeignKey(DynamicForm, on_delete=models.CASCADE, related_name='fields')
-
-
-class DynamicFormRecord(RecurField):
-    name = None
-    record = models.JSONField()
-    dynamic_form = models.ForeignKey(DynamicForm, on_delete=models.CASCADE, related_name='records')
-
-    def __str__(self):
-        return str(self.pk)
-
-
-class DynamicFormPermission(RecurField):
-    dynamic_form = models.ForeignKey(DynamicForm, models.CASCADE, related_name='dynamic_permissions')
-    users = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True, related_name='dynamic_permissions')
 

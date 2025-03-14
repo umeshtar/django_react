@@ -29,4 +29,5 @@ urlpatterns = [
     path("employee/", include("app_employee.urls", namespace="employee")),
     path("task/", include("app_task.urls", namespace="task")),
     path("permission/", include("app_permission.urls", namespace="permission")),
+    path("dynamic/", include("app_dynamic.urls", namespace="dynamic")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

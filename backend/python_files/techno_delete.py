@@ -25,7 +25,7 @@ class DjangoSoftDelete:
 
     @staticmethod
     def get_model_name(obj):
-        return obj._meta.verbose_name
+        return obj._meta.verbose_name.title()
 
     @staticmethod
     def get_inst_name(inst):

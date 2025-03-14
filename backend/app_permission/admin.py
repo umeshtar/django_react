@@ -3,7 +3,7 @@ from django.contrib import admin
 from app_permission.models import (
     CustomPermission,
     ModuleConfiguration,
-    UserDefinedContentType, ReactBoxIcon, DynamicForm, DynamicFormField, DynamicFormRecord, DynamicFormPermission,
+    UserDefinedContentType, ReactBoxIcon
 )
 from app_system.admin import RecurAdmin
 
@@ -28,25 +28,6 @@ class ModuleConfigurationAdmin(RecurAdmin):
     get_children.short_description = "Children"
     get_parents.short_description = "Parents"
 
-
-@admin.register(DynamicForm)
-class DynamicFormAdmin(RecurAdmin):
-    list_display = ['name']
-
-
-@admin.register(DynamicFormField)
-class DynamicFormFieldAdmin(RecurAdmin):
-    list_display = ['name', 'dynamic_form']
-
-
-@admin.register(DynamicFormRecord)
-class DynamicFormRecordAdmin(RecurAdmin):
-    list_display = ['dynamic_form']
-
-
-@admin.register(DynamicFormPermission)
-class DynamicFormPermissionAdmin(RecurAdmin):
-    list_display = ['name', 'dynamic_form']
 
 
 

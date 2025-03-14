@@ -96,5 +96,6 @@ class CustomUser(AbstractUser):
             return func([perm_code.format(perm=perm) in dynamic_permissions for perm in perms])
         return False
 
+
 class SystemConfiguration(RecurField):
     pass

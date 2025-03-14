@@ -12,6 +12,7 @@ export function Dashboard() {
                 <div className="main-content">
                     <h2>Welcome to Dashboard</h2>
                 </div>
+               
             </div>
         </>
     )

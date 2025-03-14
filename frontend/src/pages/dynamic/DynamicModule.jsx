@@ -4,13 +4,15 @@ import { fetchSingleRecordThunk, handleFormSubmit } from "../../slices/crud/crud
 import { DynamicResetForm } from "../../slices/dynamic/dynamicSlice"
 import { useForm } from "react-hook-form"
 import { Navigation } from "../dashboard/Navigation"
+import { useEffect } from "react"
 
 export function DynamicModule() {
     const all_modules = useSelector((state) => state.sidebar.all_modules) || []
     const link = window.location.origin + window.location.pathname
     const formId = all_modules.find(obj => obj.link === link)?.dynamic_form
     const name = 'dynamic'
-    const url = `permission/dynamic_modules/${formId}/`
+    const url = `dynamic/dynamic_modules/${formId}/`
+
     return (
         <BaseComponent {...{ name, url }}>
             <DynamicModuleHelper {...{ name, url }} />
@@ -19,8 +21,6 @@ export function DynamicModule() {
 }
 
 function DynamicModuleHelper({ name, url }) {
-    // const tableFields = { name: 'Name', employees: 'Employees' }
-
     const dispatch = useDispatch()
 
     const title = useSelector((state) => state[name].title)
