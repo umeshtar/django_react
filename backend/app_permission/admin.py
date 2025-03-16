@@ -3,12 +3,11 @@ from django.contrib import admin
 from app_permission.models import (
     CustomPermission,
     ModuleConfiguration,
-    UserDefinedContentType, ReactBoxIcon
+    ReactBoxIcon
 )
 from app_system.admin import RecurAdmin
 
 # Register your models here.
-admin.site.register(UserDefinedContentType, admin.ModelAdmin)
 admin.site.register(CustomPermission, RecurAdmin)
 admin.site.register(ReactBoxIcon, RecurAdmin)
 

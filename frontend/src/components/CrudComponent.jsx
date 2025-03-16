@@ -10,16 +10,15 @@ import { fetchSideBarData } from '../slices/global/sidebarSlice';
 
 export function FormField({ name, register, configs = {}, errors = {} }) {
     console.log('Render - FormField')
-    const required = configs?.rules?.required ? true : false
 
     let formField;
     if (configs.type === 'select') {
         formField = (
             <div>
                 <label>{configs.name}</label>
-                <select {...register(name, configs?.rules || {})} required={required} >
+                <select {...register(name)} multiple={configs.multiple || false}>
                     <option value="" disabled>{`Select ${configs.name}`}</option>
-                    {configs.options.map((opt, i) => <option key={i} value={opt.value}>{opt.label}</option>)}
+                    {configs.options.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
                 </select>
             </div>
         )
@@ -28,7 +27,15 @@ export function FormField({ name, register, configs = {}, errors = {} }) {
         formField = (
             <div>
                 <label>{configs.name}</label>
-                <input type='checkbox' {...register(name, configs?.rules || {})} />
+                <input type='checkbox' {...register(name)} />
+            </div>
+        )
+
+    } else if (configs.type === 'textarea') {
+        formField = (
+            <div>
+                <label>{configs.name}</label>
+                <textarea {...register(name)} />
             </div>
         )
 
@@ -36,7 +43,7 @@ export function FormField({ name, register, configs = {}, errors = {} }) {
         formField = (
             <div>
                 <label>{configs.name}</label>
-                <input {...register(name, configs?.rules || {})} placeholder={`Enter ${configs.name}`} required={required} />
+                <input type={configs.type} {...register(name)} placeholder={`Enter ${configs.name}`} />
             </div>
         )
     }
@@ -158,6 +165,7 @@ export function BaseComponent({ name, url, children }) {
                 }
             }))
         }
+
     }, [all_modules])
 
     return (

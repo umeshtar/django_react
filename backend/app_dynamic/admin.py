@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.shortcuts import render
 from django.urls import path
 
-from app_dynamic.models import DynamicForm, DynamicFormField, DynamicFormRecord, DynamicFormPermission
+from app_dynamic.models import DynamicForm, DynamicFormField, DynamicFormPermission
 from app_system.admin import RecurAdmin
 from backend.settings import mongo_db
 
@@ -16,11 +16,6 @@ class DynamicFormAdmin(RecurAdmin):
 @admin.register(DynamicFormField)
 class DynamicFormFieldAdmin(RecurAdmin):
     list_display = ['name', 'dynamic_form']
-
-
-@admin.register(DynamicFormRecord)
-class DynamicFormRecordAdmin(RecurAdmin):
-    list_display = ['dynamic_form']
 
 
 @admin.register(DynamicFormPermission)

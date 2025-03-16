@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.db.models import JSONField
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
@@ -9,7 +10,12 @@ from backend.settings import mongo_db
 
 # Create your models here.
 class DynamicForm(RecurField):
-    pass
+    validation = JSONField(null=True, blank=True)
+    """
+    Form Level Validation are specified here
+    
+    Common Properties: unique_together, compare_values
+    """
 
 
 class DynamicFormField(RecurField):
@@ -26,6 +32,38 @@ class DynamicFormField(RecurField):
         ('select', 'Select'),
         ('file', 'File'),
     ]
+    """
+    Properties as per field types
+    Common Properties: required, unique, default
+    
+    text, email, url
+    max_length, min_length
+    
+    number
+    max_value, min_value, decimal_places, number_type=int, float, decimal
+    
+    select
+    choices, fk, m2m, on_delete=cascade, protect
+    
+    file
+    upload_to (file_path), allowed_extensions, file_size
+    
+    Default Values if properties does not provided
+    required: false
+    unique: false
+    default: None, False
+    max_length: 99999
+    min_length: 0
+    max_value: 99999
+    min_value: -99999
+    decimal_places: 2
+    number_type: int
+    choices: []
+    fk: None,
+    m2m: None,
+    on_delete=protect
+    upload_to='/media/common_files/'
+    """
     codename = models.CharField(max_length=100)
     field_type = models.CharField(choices=field_type_choices, max_length=50)
     validation = models.JSONField()  # {'required': False, 'max_length': 100}
@@ -37,27 +75,23 @@ class DynamicFormPermission(RecurField):
     users = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True, related_name='dynamic_permissions')
 
 
-class DynamicFormRecord(RecurField):
-    name = None
-    record = models.JSONField()
-    dynamic_form = models.ForeignKey(DynamicForm, on_delete=models.CASCADE, related_name='records')
-
-    def __str__(self):
-        return str(self.pk)
-
-
 # Auto Create Permission for New Form
 @receiver(post_save, sender=DynamicForm)
 def dynamic_form_post_save(sender, instance, created, **kwargs):
     """
-        Create CRUD Permission Objects
-        Create Collection in MongoDB Database
+        On Create:
+            Create CRUD Permission Objects
+            Create Collection in MongoDB Database
+        On Update(Non-Recommended):
+            Update CRUD Permissions Names
+            Update Collection name in MongoDB Database
     """
     if created:
-        DynamicFormPermission.objects.create(dynamic_form=instance, name=f"View {instance.name}")
-        DynamicFormPermission.objects.create(dynamic_form=instance, name=f"Add {instance.name}")
-        DynamicFormPermission.objects.create(dynamic_form=instance, name=f"Change {instance.name}")
-        DynamicFormPermission.objects.create(dynamic_form=instance, name=f"Delete {instance.name}")
-        mongo_db.create_collection(str(instance.pk))
-
-
+        DynamicFormPermission.objects.get_or_create(dynamic_form=instance, name=f"View {instance.name}")
+        DynamicFormPermission.objects.get_or_create(dynamic_form=instance, name=f"Add {instance.name}")
+        DynamicFormPermission.objects.get_or_create(dynamic_form=instance, name=f"Change {instance.name}")
+        DynamicFormPermission.objects.get_or_create(dynamic_form=instance, name=f"Delete {instance.name}")
+        if str(instance.pk) not in mongo_db.list_collection_names():
+            mongo_db.create_collection(str(instance.pk))
+    else:
+        """ Need to Discuss """

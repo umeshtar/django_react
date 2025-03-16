@@ -1,6 +1,5 @@
 from django.conf import settings
 from django.contrib.auth.models import Group, Permission
-from django.contrib.contenttypes.models import ContentType
 from django.db import models
 
 from app_system.models import RecurField
@@ -8,8 +7,6 @@ from python_files.techno_validators import validate_codename
 
 
 # Create your models here.
-
-
 class ReactBoxIcon(RecurField):
     class_name = models.CharField(max_length=100)
 
@@ -78,20 +75,3 @@ class CustomPermission(RecurField):
     modules = models.ManyToManyField(
         ModuleConfiguration, blank=True, related_name="custom_permissions"
     )
-
-
-class UserDefinedContentType(ContentType):
-    """
-    For Dynamic Board and Items with Crud, Customization and Permissions (Not Final Yet)
-    Forms
-    Fields with Validations
-    - TextField with required validation
-    Store fields map as json field
-    Records
-    Store as json field
-    List
-    Filter
-    Permission
-    """
-
-
