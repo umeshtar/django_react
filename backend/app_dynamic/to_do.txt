@@ -1,0 +1,5 @@
+CRUD with SQL - Done
+CRUD with NoSQL - Done
+Validations
+Field Types
+Soft Delete

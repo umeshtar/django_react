@@ -11,11 +11,7 @@ from django.contrib.auth.models import Group
 
 
 if __name__ == "__main__":
-    lst = [1, 2, 3]
-    print(lst)
-
-    lst2 = [*lst, 4]
-    print(lst2)
+    pass
 
 
 

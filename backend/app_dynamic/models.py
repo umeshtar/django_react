@@ -4,6 +4,7 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 
 from app_system.models import RecurField
+from backend.settings import mongo_db
 
 
 # Create your models here.
@@ -13,7 +14,17 @@ class DynamicForm(RecurField):
 
 class DynamicFormField(RecurField):
     field_type_choices = [
-        ('text', 'Text Input'),
+        ('text', 'Text'),
+        ('textarea', 'Text Area'),
+        ('email', 'Email'),
+        ('url', 'URL'),
+        ('date', 'Date'),
+        ('time', 'Time'),
+        ('datetime-local', 'Date and Time'),
+        ('checkbox', 'Check Box'),
+        ('number', 'Number'),
+        ('select', 'Select'),
+        ('file', 'File'),
     ]
     codename = models.CharField(max_length=100)
     field_type = models.CharField(choices=field_type_choices, max_length=50)
@@ -37,8 +48,16 @@ class DynamicFormRecord(RecurField):
 
 # Auto Create Permission for New Form
 @receiver(post_save, sender=DynamicForm)
-def create_crud_permissions(sender, instance, created, **kwargs):
+def dynamic_form_post_save(sender, instance, created, **kwargs):
+    """
+        Create CRUD Permission Objects
+        Create Collection in MongoDB Database
+    """
     if created:
-        permissions = ['View', 'Add', 'Change', 'Delete']
-        for perm in permissions:
-            DynamicFormPermission.objects.create(dynamic_form=instance, name=f"{perm} {instance.name}")
+        DynamicFormPermission.objects.create(dynamic_form=instance, name=f"View {instance.name}")
+        DynamicFormPermission.objects.create(dynamic_form=instance, name=f"Add {instance.name}")
+        DynamicFormPermission.objects.create(dynamic_form=instance, name=f"Change {instance.name}")
+        DynamicFormPermission.objects.create(dynamic_form=instance, name=f"Delete {instance.name}")
+        mongo_db.create_collection(str(instance.pk))
+
+
