@@ -1,5 +1,6 @@
 import uuid
 from collections import defaultdict
+from decimal import Decimal, ROUND_DOWN
 
 from django.utils import timezone
 from rest_framework import status
@@ -171,6 +172,7 @@ class DynamicModuleView(APIView):
     def validate(self, payload):
         fields = self.dynamic_form.fields.all()
         errors = defaultdict(list)
+
         for field in fields:
             key = field.codename
             value = payload.get(key, None)
@@ -178,10 +180,17 @@ class DynamicModuleView(APIView):
 
             required = validation.get('required', False)
             if required is True:
-                if not value or (type(value) == str and not value.strip()):
+                if isinstance(value, str):
+                    if value and value.strip():
+                        payload[key] = value = value.strip()
+                    else:
+                        errors[key].append(f"{field.name} is required")
+                elif not value:
                     errors[key].append(f"{field.name} is required")
+            elif isinstance(value, str) and value:
+                payload[key] = value = value.strip()
 
-            if value or (type(value) == str and value.strip()):
+            if value:
                 unique = validation.get('unique', False)
                 if unique is True:
                     record = self.db_collection.find_one(
@@ -200,7 +209,33 @@ class DynamicModuleView(APIView):
                         errors[key].append(f"{field.name} shall be a string")
 
                 elif field.field_type == 'number':
-                    pass
+                    number_type = validation.get('number_type', 'int')
+                    min_value = validation.get('min_value', -99999)
+                    max_value = validation.get('max_value', 99999)
+                    if number_type == 'int':
+                        try:
+                            payload[key] = value = int(value)
+                        except:
+                            payload[key] = value = None
+                            errors[key].append(f"{field.name} is not a valid integer")
+
+                    elif number_type == 'float':
+                        try:
+                            payload[key] = value = float(value)
+                        except:
+                            payload[key] = value = None
+                            errors[key].append(f"{field.name} is not a valid float number")
+
+                    elif number_type == 'decimal':
+                        decimal_places = validation.get('decimal_places', 2)
+                        try:
+                            payload[key] = value = Decimal(value).quantize(Decimal(f"1.{'0' * decimal_places}"), rounding=ROUND_DOWN)
+                        except:
+                            payload[key] = value = None
+                            errors[key].append(f"{field.name} is not a valid decimal number")
+
+                    if value is not None and (value < min_value or value > max_value):
+                        errors[key].append(f"{field.name} value shall be in range of {min_value} to {max_value}")
 
             if key not in payload:
                 default = validation.get('default', None)
@@ -210,6 +245,8 @@ class DynamicModuleView(APIView):
                     payload[key] = False
                 else:
                     payload[key] = None
+
+        return payload, errors
 
     def has_param(self, key):
         return self.get_request_data().get(key, "False").lower() == "true"
