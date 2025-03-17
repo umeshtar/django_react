@@ -11,7 +11,7 @@ class RecurAdmin(admin.ModelAdmin):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.list_display = (
-            ("id",) + tuple(self.list_display) + ("add_by", "modify_by", "is_del")
+                ("id",) + tuple(self.list_display) + ("add_by", "modify_by", "is_del")
         )
         self.list_filter = tuple(self.list_filter) + ("is_del",)
         self.list_editable = tuple(self.list_editable) + ("is_del",)
@@ -26,5 +26,9 @@ class RecurAdmin(admin.ModelAdmin):
 
 admin.site.register(SystemConfiguration, RecurAdmin)
 admin.site.register(Permission)
-admin.site.register(ContentType)
 admin.site.register(CustomUser, admin.ModelAdmin)
+
+
+@admin.register(ContentType)
+class ContentTypeAdmin(admin.ModelAdmin):
+    list_display = ['id', 'app_label', 'model']

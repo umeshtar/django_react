@@ -99,3 +99,4 @@ class CustomUser(AbstractUser):
 
 class SystemConfiguration(RecurField):
     pass
+

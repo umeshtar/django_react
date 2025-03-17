@@ -12,7 +12,6 @@ export function DynamicModule() {
     const formId = all_modules.find(obj => obj.link === link)?.dynamic_form
     const name = 'dynamic'
     const url = `dynamic/dynamic_modules/${formId}/`
-
     return (
         <BaseComponent {...{ name, url }}>
             <DynamicModuleHelper {...{ name, url }} />

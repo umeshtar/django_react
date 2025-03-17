@@ -18,7 +18,7 @@ export function FormField({ name, register, configs = {}, errors = {} }) {
                 <label>{configs.name}</label>
                 <select {...register(name)} multiple={configs.multiple || false}>
                     <option value="" disabled>{`Select ${configs.name}`}</option>
-                    {configs.options.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
+                    {configs.options.map((opt, i) => <option key={i} value={opt.value}>{opt.label}</option>)}
                 </select>
             </div>
         )
@@ -50,7 +50,7 @@ export function FormField({ name, register, configs = {}, errors = {} }) {
     return (
         <React.Fragment>
             {formField}
-            <ErrorMessage errors={errors} name={name} />
+            <ErrorMessage errors={errors} name={name} render={({ message }) => <span style={{ color: 'red' }}>{message}</span>} />
         </ React.Fragment>
     )
 }
@@ -166,7 +166,7 @@ export function BaseComponent({ name, url, children }) {
             }))
         }
 
-    }, [all_modules])
+    }, [all_modules, name, url])
 
     return (
         init === true ? children : "Loading..."

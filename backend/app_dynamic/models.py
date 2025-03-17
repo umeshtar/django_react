@@ -13,8 +13,7 @@ class DynamicForm(RecurField):
     validation = JSONField(null=True, blank=True)
     """
     Form Level Validation are specified here
-    
-    Common Properties: unique_together, compare_values
+    unique_together, compare_values, title_field
     """
 
 
@@ -43,7 +42,7 @@ class DynamicFormField(RecurField):
     max_value, min_value, decimal_places, number_type=int, float, decimal
     
     select
-    relation_type=Choices, One To One, One To Many, Many To Many, choices, related_model, related_model_type=SQL, NoSQL, on_delete=cascade, protect
+    relation_type=Choices, One To One, Many To One, Many To Many, choices, related_model, related_model_type=SQL, NoSQL, on_delete=cascade, protect
     
     file
     upload_to (file_path), allowed_extensions, file_size

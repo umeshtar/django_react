@@ -7,6 +7,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.core.files.uploadedfile import UploadedFile
 from django.utils import timezone
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -75,7 +76,10 @@ class DynamicModuleView(APIView):
             response['fields'] = {row.codename: row.name for row in self.dynamic_form.fields.all()}
 
         if get_data:
-            response["data"] = list(self.db_collection.find(filter_query, self.get_query())) if can_view else []
+            response['data'] = self.get_serialized_data(
+                data=list(self.db_collection.find(filter_query, self.get_query())) if can_view else [],
+                is_form=False
+            )
 
         elif fetch_record:
             record = self.db_collection.find_one({'rec_id': self.get_request_data().get("rec_id")}, self.get_query())
@@ -91,6 +95,9 @@ class DynamicModuleView(APIView):
     def post(self, request, *args, **kwargs):
         payload = self.get_request_data()
         payload.update(self.get_recur_fields())
+        payload, errors = self.validate(payload)
+        if errors:
+            raise ValidationError(errors)
         result = self.db_collection.insert_one(payload)
         record = self.db_collection.find_one({'_id': result.inserted_id}, self.get_query())
         return Response(
@@ -101,6 +108,9 @@ class DynamicModuleView(APIView):
     def put(self, request, *args, **kwargs):
         payload = self.get_request_data()
         rec_id = payload.pop('rec_id')
+        payload, errors = self.validate(payload, rec_id)
+        if errors:
+            raise ValidationError(errors)
         self.db_collection.update_one(
             {'rec_id': rec_id},
             {'$set': {**payload, 'modify_by': request.user.username, 'modify_date': timezone.now()}}
@@ -143,7 +153,29 @@ class DynamicModuleView(APIView):
             configs[key] = dict(type=field_type, name=field_name)
             # configs[key]['validators'] = "Frontend Pending"
             if field_type == "select":
-                configs[key]["options"] = validation.get('choices', [])
+                configs[key]['options'] = []
+                relation_type = validation.get('relation_type', 'Choices')
+                if relation_type == 'Choices':
+                    configs[key]['options'] = [{'value': row, 'label': row} for row in validation.get('choices', [])]
+
+                elif relation_type in ['One To One', 'Many To One', 'Many To Many']:
+                    related_model_type = validation.get('related_model_type', None)
+                    related_model = validation.get('related_model', None)
+                    if related_model and related_model_type:
+                        if related_model_type == 'SQL':
+                            configs[key]['options'] = [
+                                {'value': row.pk, 'label': str(row)}
+                                for row in ContentType.objects.get(pk=related_model).model_class().objects.all()
+                            ]
+
+                        elif related_model_type == 'NoSQL':
+                            related_dynamic_form = DynamicForm.objects.get(pk=related_model)
+                            title_field = related_dynamic_form.validation.get('title_field')
+                            configs[key]['options'] = [
+                                {'value': row.get('rec_id'), 'label': row.get(title_field)}
+                                for row in mongo_db[str(related_model)].find({'is_del': False}, {'_id': 0, 'rec_id': 1, title_field: 1})
+                            ]
+
                 configs[key]["multiple"] = validation.get('multiple', False)
             default_values[key] = validation.get('default', None)
         return {
@@ -175,7 +207,7 @@ class DynamicModuleView(APIView):
     def collect_files(self):
         pass
 
-    def validate(self, payload):
+    def validate(self, payload, rec_id=None):
         fields = self.dynamic_form.fields.all()
         errors = defaultdict(list)
 
@@ -204,8 +236,8 @@ class DynamicModuleView(APIView):
                 unique = validation.get('unique', False)
                 if unique is True:
                     query = {key: {'$regex': f"^{value}$", '$options': 'i'}, 'is_del': False}
-                    if 'rec_id' in payload and payload['rec_id']:
-                        query['rec_id'] = {'$ne': payload.get('rec_id')}
+                    if rec_id:
+                        query['rec_id'] = {'$ne': rec_id}
                     record = self.db_collection.find_one(query)
                     if record:
                         errors[key].append(f"{field.name} is already exists")
@@ -225,7 +257,7 @@ class DynamicModuleView(APIView):
                     max_value = validation.get('max_value', 99999)
                     if number_type == 'int':
                         try:
-                            payload[key] = value = int(value)
+                            payload[key] = value = int(float(value))
                         except ValueError:
                             payload[key] = value = None
                             errors[key].append(f"{field.name} is not a valid integer")
@@ -240,12 +272,12 @@ class DynamicModuleView(APIView):
                     elif number_type == 'decimal':
                         decimal_places = validation.get('decimal_places', 2)
                         try:
-                            payload[key] = value = Decimal(value).quantize(Decimal(f"1.{'0' * decimal_places}"), rounding=ROUND_DOWN)
+                            payload[key] = value = str(Decimal(value).quantize(Decimal(f"1.{'0' * decimal_places}"), rounding=ROUND_DOWN))
                         except (ValueError, InvalidOperation):
                             payload[key] = value = None
                             errors[key].append(f"{field.name} is not a valid decimal number")
 
-                    if value is not None and (value < min_value or value > max_value):
+                    if value is not None and (Decimal(value) < min_value or Decimal(value) > max_value):
                         errors[key].append(f"{field.name} value shall be in range of {min_value} to {max_value}")
 
                 elif field.field_type == 'select':
@@ -255,8 +287,14 @@ class DynamicModuleView(APIView):
                     else:
                         if relation_type == 'Choices':
                             choices = validation.get('choices', [])
-                            if value not in choices:
-                                errors[key].append(f"{value} is not a valid choice")
+                            multiple = validation.get('multiple', False)
+                            if multiple is True and isinstance(value, list):
+                                for v in value:
+                                    if v not in choices:
+                                        errors[key].append(f"{v} is not a valid choice")
+                            elif multiple is False:
+                                if value not in choices:
+                                    errors[key].append(f"{value} is not a valid choice")
 
                         elif relation_type in ['One To One', 'One To Many', 'Many To Many']:
                             related_model_type = validation.get('related_model_type', None)
@@ -278,7 +316,7 @@ class DynamicModuleView(APIView):
                                     DynamicForm.objects.get(pk=related_model)
                                     record = mongo_db[str(related_model)].find_one({'rec_id': value})
                                     if record is None:
-                                        raise Exception('Record not Found')
+                                        errors[key].append(f"{value} is not a valid choice")
                                 except (ObjectDoesNotExist, ValueError, TypeError):
                                     errors[key].append(f"{value} is not a valid choice")
 
@@ -293,9 +331,37 @@ class DynamicModuleView(APIView):
                             errors[key].append(f"File size shall not be more than {max_size}")
                     else:
                         errors[key].append(f"Uploaded file is not valid")
+
             payload.setdefault(key, validation.get('default', False if field.field_type == 'checkbox' else None))
 
         return payload, errors
+
+    def get_serialized_data(self, data, is_form=False):
+        if isinstance(data, list):
+            return [self.get_serialized_data(row, is_form) for row in data]
+        else:
+            record = dict()
+            for field in self.dynamic_form.fields.all():
+                record[field.codename] = value = data.get(field.codename, None)
+                if value:
+                    if is_form is False:
+                        if field.field_type == 'select':
+                            relation_type = field.validation.get('relation_type', None)
+                            related_model = field.validation.get('related_model', None)
+                            related_model_type = field.validation.get('related_model_type', None)
+                            if relation_type and related_model and related_model_type:
+                                if relation_type in ['One To One', 'Many To One', 'Many To Many']:
+                                    if related_model_type == 'SQL':
+                                        record[field.codename] = str(ContentType.objects.get(pk=related_model).model_class().objects.get(pk=value))
+
+                                    elif related_model_type == 'NoSQL':
+                                        related_dynamic_form = DynamicForm.objects.get(pk=related_model)
+                                        title_field = related_dynamic_form.validation.get('title_field', None)
+                                        if title_field:
+                                            record[field.codename] = mongo_db[str(related_model)].find_one(
+                                                {'rec_id': value, 'is_del': False}, {title_field: 1}
+                                            ).get(title_field, None)
+            return record
 
     def has_param(self, key):
         return self.get_request_data().get(key, "False").lower() == "true"
