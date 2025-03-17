@@ -43,7 +43,7 @@ class DynamicFormField(RecurField):
     max_value, min_value, decimal_places, number_type=int, float, decimal
     
     select
-    choices, fk, m2m, on_delete=cascade, protect
+    choices, queryset, fk, m2m, on_delete=cascade, protect
     
     file
     upload_to (file_path), allowed_extensions, file_size

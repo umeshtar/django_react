@@ -200,7 +200,7 @@ class DynamicModuleView(APIView):
                         errors[key].append(f"{field.name} is already exists")
 
                 if field.field_type in ['text', 'email', 'url']:
-                    if type(value) == str:
+                    if isinstance(value, str):
                         min_length = validation.get('min_length', 0)
                         max_length = validation.get('max_length', 99999)
                         if len(value) < min_length or len(value) > max_length:
@@ -236,6 +236,20 @@ class DynamicModuleView(APIView):
 
                     if value is not None and (value < min_value or value > max_value):
                         errors[key].append(f"{field.name} value shall be in range of {min_value} to {max_value}")
+
+                elif field.field_type == 'select':
+                    choices = validation.get('choices', [])
+                    fk = validation.get('fk', None)
+                    m2m = validation.get('m2m', None)
+                    if choices:
+                        if value not in choices:
+                            errors[key].append(f"{value} is not a valid choice")
+
+                    elif fk:
+                        pass
+
+                    elif m2m:
+                        pass
 
             if key not in payload:
                 default = validation.get('default', None)
