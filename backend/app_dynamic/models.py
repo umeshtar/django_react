@@ -43,10 +43,11 @@ class DynamicFormField(RecurField):
     max_value, min_value, decimal_places, number_type=int, float, decimal
     
     select
-    choices, queryset, fk, m2m, on_delete=cascade, protect
+    relation_type=Choices, One To One, One To Many, Many To Many, choices, related_model, related_model_type=SQL, NoSQL, on_delete=cascade, protect
     
     file
     upload_to (file_path), allowed_extensions, file_size
+    1. Server, 2. Google Cloud, 3. Google Drive
     
     Default Values if properties does not provided
     required: false
@@ -59,8 +60,8 @@ class DynamicFormField(RecurField):
     decimal_places: 2
     number_type: int
     choices: []
-    fk: None,
-    m2m: None,
+    related_model: None,
+    related_model_type: None,
     on_delete=protect
     upload_to='/media/common_files/'
     """

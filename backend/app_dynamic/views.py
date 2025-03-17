@@ -1,7 +1,10 @@
 import uuid
 from collections import defaultdict
-from decimal import Decimal, ROUND_DOWN
+from decimal import Decimal, ROUND_DOWN, InvalidOperation
 
+from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ObjectDoesNotExist
+from django.core.files.uploadedfile import UploadedFile
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -169,6 +172,9 @@ class DynamicModuleView(APIView):
             **extra,
         }
 
+    def collect_files(self):
+        pass
+
     def validate(self, payload):
         fields = self.dynamic_form.fields.all()
         errors = defaultdict(list)
@@ -177,6 +183,9 @@ class DynamicModuleView(APIView):
             key = field.codename
             value = payload.get(key, None)
             validation = field.validation
+
+            if field.field_type == 'file':
+                value = self.request.FILES.get(key, None)
 
             required = validation.get('required', False)
             if required is True:
@@ -187,15 +196,17 @@ class DynamicModuleView(APIView):
                         errors[key].append(f"{field.name} is required")
                 elif not value:
                     errors[key].append(f"{field.name} is required")
+
             elif isinstance(value, str) and value:
                 payload[key] = value = value.strip()
 
             if value:
                 unique = validation.get('unique', False)
                 if unique is True:
-                    record = self.db_collection.find_one(
-                        {key: {'$regex': f"^{value}$", '$options': 'i'}, 'is_del': False}
-                    )
+                    query = {key: {'$regex': f"^{value}$", '$options': 'i'}, 'is_del': False}
+                    if 'rec_id' in payload and payload['rec_id']:
+                        query['rec_id'] = {'$ne': payload.get('rec_id')}
+                    record = self.db_collection.find_one(query)
                     if record:
                         errors[key].append(f"{field.name} is already exists")
 
@@ -215,14 +226,14 @@ class DynamicModuleView(APIView):
                     if number_type == 'int':
                         try:
                             payload[key] = value = int(value)
-                        except:
+                        except ValueError:
                             payload[key] = value = None
                             errors[key].append(f"{field.name} is not a valid integer")
 
                     elif number_type == 'float':
                         try:
                             payload[key] = value = float(value)
-                        except:
+                        except ValueError:
                             payload[key] = value = None
                             errors[key].append(f"{field.name} is not a valid float number")
 
@@ -230,7 +241,7 @@ class DynamicModuleView(APIView):
                         decimal_places = validation.get('decimal_places', 2)
                         try:
                             payload[key] = value = Decimal(value).quantize(Decimal(f"1.{'0' * decimal_places}"), rounding=ROUND_DOWN)
-                        except:
+                        except (ValueError, InvalidOperation):
                             payload[key] = value = None
                             errors[key].append(f"{field.name} is not a valid decimal number")
 
@@ -238,27 +249,51 @@ class DynamicModuleView(APIView):
                         errors[key].append(f"{field.name} value shall be in range of {min_value} to {max_value}")
 
                 elif field.field_type == 'select':
-                    choices = validation.get('choices', [])
-                    fk = validation.get('fk', None)
-                    m2m = validation.get('m2m', None)
-                    if choices:
-                        if value not in choices:
-                            errors[key].append(f"{value} is not a valid choice")
+                    relation_type = validation.get('relation_type', None)
+                    if relation_type is None:
+                        errors[key].append(f"Select valid Relation")
+                    else:
+                        if relation_type == 'Choices':
+                            choices = validation.get('choices', [])
+                            if value not in choices:
+                                errors[key].append(f"{value} is not a valid choice")
 
-                    elif fk:
-                        pass
+                        elif relation_type in ['One To One', 'One To Many', 'Many To Many']:
+                            related_model_type = validation.get('related_model_type', None)
+                            if related_model_type is None:
+                                raise Exception('Missing Related Model Type')
 
-                    elif m2m:
-                        pass
+                            related_model = validation.get('related_model', None)
+                            if related_model is None:
+                                raise Exception('Missing Related Model')
 
-            if key not in payload:
-                default = validation.get('default', None)
-                if default:
-                    payload[key] = default
-                elif field.field_type == 'checkbox':
-                    payload[key] = False
-                else:
-                    payload[key] = None
+                            if related_model_type == 'SQL':
+                                try:
+                                    ContentType.objects.get(pk=related_model).model_class().objects.get(pk=value)
+                                except (ObjectDoesNotExist, ValueError, TypeError):
+                                    errors[key].append(f"{value} is not a valid choice")
+
+                            elif related_model_type == 'NoSQL':
+                                try:
+                                    DynamicForm.objects.get(pk=related_model)
+                                    record = mongo_db[str(related_model)].find_one({'rec_id': value})
+                                    if record is None:
+                                        raise Exception('Record not Found')
+                                except (ObjectDoesNotExist, ValueError, TypeError):
+                                    errors[key].append(f"{value} is not a valid choice")
+
+                elif field.field_type == 'file':
+                    if isinstance(value, UploadedFile):
+                        allowed_extensions = validation.get('allowed_extensions', '').split(',')
+                        max_size = validation.get('file_size', 5 * 1024 * 1024)
+                        if value.content_type not in allowed_extensions:
+                            errors[key].append(f"{value.content_type} is not allowed")
+
+                        if value.size > max_size:
+                            errors[key].append(f"File size shall not be more than {max_size}")
+                    else:
+                        errors[key].append(f"Uploaded file is not valid")
+            payload.setdefault(key, validation.get('default', False if field.field_type == 'checkbox' else None))
 
         return payload, errors
 
@@ -267,7 +302,3 @@ class DynamicModuleView(APIView):
 
     def has_action(self, key):
         return self.get_request_data().get("action", None) == key
-
-
-
-
