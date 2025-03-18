@@ -99,8 +99,8 @@ class DynamicModuleView(APIView):
 
     def post(self, request, *args, **kwargs):
         payload = self.get_request_data()
-        payload.update(self.get_recur_fields())
         form_data = self.get_validated_form_data(payload)
+        form_data.update(self.get_recur_fields())
         result = self.db_collection.insert_one(form_data)
         record = self.db_collection.find_one({'_id': result.inserted_id}, self.get_query())
 
@@ -113,7 +113,7 @@ class DynamicModuleView(APIView):
         rec_id = payload.get('rec_id')
         form_data = self.get_validated_form_data(payload)
         self.db_collection.update_one(
-            {'rec_id': rec_id},
+            {'rec_id': rec_id, 'is_del': False},
             {'$set': {**form_data, 'modify_by': request.user.username, 'modify_date': timezone.now()}}
         )
         record = self.db_collection.find_one({'rec_id': rec_id}, self.get_query())
@@ -386,3 +386,4 @@ class DynamicModuleView(APIView):
 
     def has_action(self, key):
         return self.get_request_data().get("action", None) == key
+
