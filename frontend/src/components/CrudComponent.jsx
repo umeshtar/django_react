@@ -43,7 +43,7 @@ export function FormField({ name, register, configs = {}, errors = {} }) {
         formField = (
             <div>
                 <label>{configs.name}</label>
-                <input type={configs.type} {...register(name)} placeholder={`Enter ${configs.name}`} />
+                <input type={configs.type} {...register(name)} placeholder={`Enter ${configs.name}`} multiple={configs.multiple || false}/>
             </div>
         )
     }

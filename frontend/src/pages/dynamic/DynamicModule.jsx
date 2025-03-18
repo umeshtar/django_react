@@ -36,9 +36,7 @@ function DynamicModuleHelper({ name, url }) {
     const showTable = tableFields && (__view) ? true : false
 
     function onSubmit(data) {
-        console.log({ data });
         if ((mode === 'Update' && data.rec_id && __change) || (mode === 'Create' && __add)) {
-            console.log('Update');
             handleFormSubmit({ name, url, data, reset, setError, dispatch })
         }
     }

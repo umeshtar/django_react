@@ -45,7 +45,7 @@ class DynamicFormField(RecurField):
     relation_type=Choices, One To One, Many To One, Many To Many, choices, related_model, related_model_type=SQL, NoSQL, on_delete=cascade, protect
     
     file
-    upload_to (file_path), allowed_extensions, file_size
+    upload_to (file_path), allowed_extensions, file_size, multiple
     1. Server, 2. Google Cloud, 3. Google Drive
     
     Default Values if properties does not provided

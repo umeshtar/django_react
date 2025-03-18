@@ -14,7 +14,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from app_dynamic.models import DynamicForm
-from backend.settings import mongo_db, MEDIA_ROOT
+from backend.settings import mongo_db, MEDIA_ROOT, env, MEDIA_URL
 from python_files.techno_generic import ClientException
 
 
@@ -174,8 +174,11 @@ class DynamicModuleView(APIView):
                                 {'value': row.get('rec_id'), 'label': row.get(title_field)}
                                 for row in mongo_db[str(related_model)].find({'is_del': False}, {'_id': 0, 'rec_id': 1, title_field: 1})
                             ]
-
                 configs[key]["multiple"] = validation.get('multiple', False)
+
+            elif field_type == 'file':
+                configs[key]["multiple"] = validation.get('multiple', False)
+
             default_values[key] = validation.get('default', None)
         return {
             "fields": configs,
@@ -214,7 +217,11 @@ class DynamicModuleView(APIView):
             validation = field.validation
 
             if field.field_type == 'file':
-                value = self.request.FILES.get(key, None)
+                multiple = validation.get('multiple', False)
+                if multiple:
+                    value = self.request.FILES.getlist(key, [])
+                else:
+                    value = self.request.FILES.get(key, None)
             else:
                 value = payload.get(key, None)
 
@@ -323,26 +330,26 @@ class DynamicModuleView(APIView):
                                     errors[key].append(f"{value} is not a valid choice")
 
                 elif field.field_type == 'file':
-                    if isinstance(value, UploadedFile):
-                        allowed_extensions = validation.get('allowed_extensions', '').split(',')
-                        max_size = validation.get('file_size', 5 * 1024 * 1024)
-                        if value.content_type not in allowed_extensions:
-                            errors[key].append(f"{value.content_type} is not allowed")
-
-                        if value.size > max_size:
-                            errors[key].append(f"File size shall not be more than {max_size}")
-
-                        if not errors[key]:
-                            file_name = f"{uuid.uuid4()}_{value.name}"
-                            file_path = os.path.join(MEDIA_ROOT, file_name)
-                            with open(file_path, "wb") as destination:
-                                for chunk in value.chunks():
-                                    destination.write(chunk)
-                            saved_files.append(file_path)
-                            form_data[key] = file_path
+                    multiple = validation.get('multiple', False)
+                    if multiple:
+                        form_data[key] = []
+                        for file in value:
+                            errors_list, saved_file = self.handle_file_data(file, field)
+                            if errors_list:
+                                errors[key].extend(errors_list)
+                            if saved_file:
+                                saved_files.append(saved_file)
+                                form_data[key].append(saved_file)
                     else:
-                        errors[key].append(f"Uploaded file is not valid")
+                        errors_list, saved_file = self.handle_file_data(value, field)
+                        if errors_list:
+                            errors[key].extend(errors_list)
+                        if saved_file:
+                            saved_files.append(saved_file)
+                            form_data[key] = saved_file
 
+                    if not form_data[key]:
+                        form_data[key] = None
             form_data.setdefault(key, validation.get('default', False if field.field_type == 'checkbox' else None))
 
         if errors:
@@ -379,7 +386,44 @@ class DynamicModuleView(APIView):
                                             record[field.codename] = mongo_db[str(related_model)].find_one(
                                                 {'rec_id': value, 'is_del': False}, {title_field: 1}
                                             ).get(title_field, None)
+
+                        elif field.field_type == 'file':
+                            if isinstance(value, list):
+                                record[field.codename] = ', '.join([f"{env('BACKEND_URL')}{MEDIA_URL}{row}" for row in value])
+                            else:
+                                record[field.codename] = f"{env('BACKEND_URL')}{MEDIA_URL}{value}"
+
             return record
+
+    @staticmethod
+    def handle_file_data(file, field):
+        validation = field.validation
+        errors = []
+        saved_file = None
+
+        if isinstance(file, UploadedFile):
+            allowed_extensions = validation.get('allowed_extensions', [])
+            max_size = validation.get('file_size', 5 * 1024 * 1024)
+            if file.content_type not in allowed_extensions:
+                errors.append(f"{file.content_type} is not allowed")
+
+            if file.size > max_size:
+                errors.append(f"File size shall not be more than {max_size}")
+
+            if not errors:
+                uploads_to = validation.get("uploads_to", "uploads")
+                file_name = f"{uuid.uuid4()}_{file.name}"
+                upload_dir = os.path.join(MEDIA_ROOT, uploads_to)
+                os.makedirs(upload_dir, exist_ok=True)
+
+                file_path = os.path.join(str(upload_dir), file_name)
+                with open(file_path, "wb") as destination:
+                    for chunk in file.chunks():
+                        destination.write(chunk)
+                saved_file = os.path.relpath(file_path, MEDIA_ROOT)
+        else:
+            errors.append(f"Uploaded file is not valid")
+        return errors, saved_file
 
     def has_param(self, key):
         return self.get_request_data().get(key, "False").lower() == "true"

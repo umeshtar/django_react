@@ -1,6 +1,42 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit'
 import { authFetch } from '../../helpers/fetch'
 
+
+const getPayload = (data) => {
+    let normalData = {}
+    let jsonData = {}
+    let formData = new FormData()
+
+    Object.entries(data).forEach(([k, v]) => {
+        if (v instanceof FileList) {
+            Array.from(v).forEach((file) => {
+                formData.append(k, file)
+            })
+
+        } else if (v instanceof File) {
+            formData.append(k, v)
+
+        } else if (v !== null && typeof v === 'object') {
+            jsonData[k] = v
+
+        } else {
+            normalData[k] = v
+        }
+    })
+
+    if (formData.entries().next().done === false) {
+        if (Object.keys(jsonData).length > 0) {
+            formData.append('json_data', JSON.stringify(jsonData))
+        }
+        Object.entries(normalData).forEach(([k, v]) => {
+            formData.append(k, v)
+        })
+        return formData
+    }
+    return data
+}
+
+
 export function baseAsyncThunk({ name, action, func }) {
     return createAsyncThunk(`${name}/${action}`, async ({ successCallBack, errorCallBack, ...data } = {}, { rejectWithValue }) => {
         try {
@@ -27,11 +63,23 @@ export function fetchSingleRecordThunk({ name, url }) {
 }
 
 export function createRecordThunk({ name, url }) {
-    return baseAsyncThunk({ name, action: 'createRecord', func: (data) => authFetch.post(url, data) })
+    return baseAsyncThunk({
+        name, action: 'createRecord', func: (data) => {
+            data = getPayload(data)
+            let contentType = data instanceof FormData ? 'multipart/form-data' : 'application/json'
+            return authFetch.post(url, data, { headers: { "Content-Type": contentType } })
+        }
+    })
 }
 
 export function updateRecordThunk({ name, url }) {
-    return baseAsyncThunk({ name, action: 'updateRecord', func: (data) => authFetch.put(url, data) })
+    return baseAsyncThunk({
+        name, action: 'updateRecord', func: (data) => {
+            data = getPayload(data)
+            let contentType = data instanceof FormData ? 'multipart/form-data' : 'application/json'
+            return authFetch.put(url, data, { headers: { "Content-Type": contentType } })
+        }
+    })
 }
 
 export function deleteRecordThunk({ name, url }) {
@@ -103,7 +151,7 @@ export function createCrudSlice({ name, initialState = {}, reducers = {}, extraR
                     state.record = undefined
                 })
                 .addCase(`${name}/deleteRecord/fulfilled`, (state, action) => {
-                    if(action.payload.delete_confirmation === true){
+                    if (action.payload.delete_confirmation === true) {
                         state.data = state.data.filter(obj => !action.payload.ids.includes(obj.rec_id))
                     }
                 })
