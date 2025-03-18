@@ -1,4 +1,5 @@
 import os
+from collections import defaultdict
 
 import django
 
@@ -6,4 +7,6 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")
 django.setup()
 
 if __name__ == "__main__":
-    print(int(float('77.03')))
+    d = defaultdict(list)
+
+    print(d['a'])

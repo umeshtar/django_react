@@ -1,3 +1,4 @@
+import os
 import uuid
 from collections import defaultdict
 from decimal import Decimal, ROUND_DOWN, InvalidOperation
@@ -13,7 +14,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from app_dynamic.models import DynamicForm
-from backend.settings import mongo_db
+from backend.settings import mongo_db, MEDIA_ROOT
 from python_files.techno_generic import ClientException
 
 
@@ -86,40 +87,40 @@ class DynamicModuleView(APIView):
             if record is None:
                 raise ClientException(f"{self.title} not found")
             if is_form:
-                response["data"] = record if (can_add or can_change) else dict()
+                response["data"] = self.get_serialized_data(
+                    data=record, is_form=is_form
+                ) if (can_add or can_change) else dict()
             else:
-                response["data"] = dict()
+                response["data"] = self.get_serialized_data(
+                    data=record, is_form=is_form
+                ) if can_view else dict()
 
         return Response(response, status=status.HTTP_200_OK)
 
     def post(self, request, *args, **kwargs):
         payload = self.get_request_data()
         payload.update(self.get_recur_fields())
-        payload, errors = self.validate(payload)
-        if errors:
-            raise ValidationError(errors)
-        result = self.db_collection.insert_one(payload)
+        form_data = self.get_validated_form_data(payload)
+        result = self.db_collection.insert_one(form_data)
         record = self.db_collection.find_one({'_id': result.inserted_id}, self.get_query())
-        return Response(
-            data={'data': record, 'message': f"{self.title} Created Successfully"},
-            status=status.HTTP_201_CREATED
-        )
+
+        data = self.get_serialized_data(data=record)
+        message = f"{self.title} Created Successfully"
+        return Response(data={'data': data, 'message': message}, status=status.HTTP_201_CREATED)
 
     def put(self, request, *args, **kwargs):
         payload = self.get_request_data()
-        rec_id = payload.pop('rec_id')
-        payload, errors = self.validate(payload, rec_id)
-        if errors:
-            raise ValidationError(errors)
+        rec_id = payload.get('rec_id')
+        form_data = self.get_validated_form_data(payload)
         self.db_collection.update_one(
             {'rec_id': rec_id},
-            {'$set': {**payload, 'modify_by': request.user.username, 'modify_date': timezone.now()}}
+            {'$set': {**form_data, 'modify_by': request.user.username, 'modify_date': timezone.now()}}
         )
         record = self.db_collection.find_one({'rec_id': rec_id}, self.get_query())
-        return Response(
-            data={'data': record, 'message': f"{self.title} Updated Successfully"},
-            status=status.HTTP_200_OK
-        )
+
+        data = self.get_serialized_data(data=record)
+        message = f"{self.title} Updated Successfully"
+        return Response(data={'data': data, 'message': message}, status=status.HTTP_200_OK)
 
     def delete(self, request, *args, **kwargs):
         ids = self.get_request_data().getlist('ids[]', [])
@@ -127,11 +128,9 @@ class DynamicModuleView(APIView):
             {'rec_id': {'$in': ids}},
             {'$set': {'is_del': True, 'delete_by': request.user.username, 'delete_date': timezone.now()}}
         )
-        return Response(
-            data={'delete_confirmation': True, 'ids': ids,
-                  'message': f"{self.title} Deleted Successfully"},
-            status=status.HTTP_200_OK
-        )
+
+        message = f"{self.title} Deleted Successfully"
+        return Response(data={'delete_confirmation': True, 'ids': ids, 'message': message}, status=status.HTTP_200_OK)
 
     def get_request_data(self):
         if self.request.method in ["GET", "DELETE"]:
@@ -204,42 +203,45 @@ class DynamicModuleView(APIView):
             **extra,
         }
 
-    def collect_files(self):
-        pass
-
-    def validate(self, payload, rec_id=None):
+    def get_validated_form_data(self, payload):
         fields = self.dynamic_form.fields.all()
         errors = defaultdict(list)
+        saved_files = []
+        form_data = dict()
 
         for field in fields:
             key = field.codename
-            value = payload.get(key, None)
             validation = field.validation
 
             if field.field_type == 'file':
                 value = self.request.FILES.get(key, None)
+            else:
+                value = payload.get(key, None)
+
+            form_data[key] = value
 
             required = validation.get('required', False)
             if required is True:
                 if isinstance(value, str):
                     if value and value.strip():
-                        payload[key] = value = value.strip()
+                        form_data[key] = value = value.strip()
                     else:
                         errors[key].append(f"{field.name} is required")
                 elif not value:
                     errors[key].append(f"{field.name} is required")
 
             elif isinstance(value, str) and value:
-                payload[key] = value = value.strip()
+                form_data[key] = value = value.strip()
 
             if value:
                 unique = validation.get('unique', False)
                 if unique is True:
                     query = {key: {'$regex': f"^{value}$", '$options': 'i'}, 'is_del': False}
+                    rec_id = payload.get('rec_id', None)
                     if rec_id:
                         query['rec_id'] = {'$ne': rec_id}
-                    record = self.db_collection.find_one(query)
-                    if record:
+                    exists = self.db_collection.find_one(query)
+                    if exists:
                         errors[key].append(f"{field.name} is already exists")
 
                 if field.field_type in ['text', 'email', 'url']:
@@ -257,24 +259,24 @@ class DynamicModuleView(APIView):
                     max_value = validation.get('max_value', 99999)
                     if number_type == 'int':
                         try:
-                            payload[key] = value = int(float(value))
+                            form_data[key] = value = int(float(value))
                         except ValueError:
-                            payload[key] = value = None
+                            form_data[key] = value = None
                             errors[key].append(f"{field.name} is not a valid integer")
 
                     elif number_type == 'float':
                         try:
-                            payload[key] = value = float(value)
+                            form_data[key] = value = float(value)
                         except ValueError:
-                            payload[key] = value = None
+                            form_data[key] = value = None
                             errors[key].append(f"{field.name} is not a valid float number")
 
                     elif number_type == 'decimal':
                         decimal_places = validation.get('decimal_places', 2)
                         try:
-                            payload[key] = value = str(Decimal(value).quantize(Decimal(f"1.{'0' * decimal_places}"), rounding=ROUND_DOWN))
+                            form_data[key] = value = str(Decimal(value).quantize(Decimal(f"1.{'0' * decimal_places}"), rounding=ROUND_DOWN))
                         except (ValueError, InvalidOperation):
-                            payload[key] = value = None
+                            form_data[key] = value = None
                             errors[key].append(f"{field.name} is not a valid decimal number")
 
                     if value is not None and (Decimal(value) < min_value or Decimal(value) > max_value):
@@ -314,8 +316,8 @@ class DynamicModuleView(APIView):
                             elif related_model_type == 'NoSQL':
                                 try:
                                     DynamicForm.objects.get(pk=related_model)
-                                    record = mongo_db[str(related_model)].find_one({'rec_id': value})
-                                    if record is None:
+                                    exists = mongo_db[str(related_model)].find_one({'rec_id': value})
+                                    if exists is None:
                                         errors[key].append(f"{value} is not a valid choice")
                                 except (ObjectDoesNotExist, ValueError, TypeError):
                                     errors[key].append(f"{value} is not a valid choice")
@@ -329,18 +331,34 @@ class DynamicModuleView(APIView):
 
                         if value.size > max_size:
                             errors[key].append(f"File size shall not be more than {max_size}")
+
+                        if not errors[key]:
+                            file_name = f"{uuid.uuid4()}_{value.name}"
+                            file_path = os.path.join(MEDIA_ROOT, file_name)
+                            with open(file_path, "wb") as destination:
+                                for chunk in value.chunks():
+                                    destination.write(chunk)
+                            saved_files.append(file_path)
+                            form_data[key] = file_path
                     else:
                         errors[key].append(f"Uploaded file is not valid")
 
-            payload.setdefault(key, validation.get('default', False if field.field_type == 'checkbox' else None))
+            form_data.setdefault(key, validation.get('default', False if field.field_type == 'checkbox' else None))
 
-        return payload, errors
+        if errors:
+            for file_path in saved_files:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            raise ValidationError(errors)
+
+        return form_data
 
     def get_serialized_data(self, data, is_form=False):
         if isinstance(data, list):
             return [self.get_serialized_data(row, is_form) for row in data]
-        else:
-            record = dict()
+
+        elif isinstance(data, dict):
+            record = {'rec_id': data.get('rec_id')}
             for field in self.dynamic_form.fields.all():
                 record[field.codename] = value = data.get(field.codename, None)
                 if value:
